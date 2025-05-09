@@ -1,5 +1,6 @@
 const passport = require("passport");
 const { userModel } = require("../models/userModel");
+const profileModel = require("../models/profileModel");
 const GoogleStrategy = require("passport-google-oauth20").Strategy;
 
 passport.use(
@@ -17,12 +18,12 @@ passport.use(
                 if (!email) {
                     return done(new Error("No email found in Google profile"), null);
                 }
-        
+
                 const mode = req.query.state;
                 console.log("🔍 Mode received:", mode); // Debugging
-        
+
                 let user = await userModel.findOne({ email });
-        
+
                 if (mode === "login") {
                     if (!user) {
                         return done(null, false, { message: "User not found. Please register first." });
@@ -32,21 +33,28 @@ passport.use(
                     }
                     return done(null, user);
                 }
-        
+
                 if (mode === "register") {
                     if (user) {
                         return done(null, false, { message: "User already exists. Please log in." });
                     }
-        
+
                     user = await userModel.create({
                         name: profile.displayName,
                         email,
                         googleId: profile.id
                     });
-        
+
+                    await profileModel.create({
+                        user: user._id,
+                        name: user.name,
+                        bio: '',
+                        socials: {},
+                    });
+
                     return done(null, user);
                 }
-        
+
                 return done(new Error("Invalid mode"), null);
             } catch (error) {
                 console.error("❌ Error in Google authentication:", error);

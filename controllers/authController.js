@@ -3,6 +3,7 @@ const sendEmail = require("../helpers/sendEmail");
 const { userModel } = require("../models/userModel");
 const jwt = require("jsonwebtoken");
 const OTP = require("../models/otpModel");
+const profileModel = require("../models/profileModel");
 
 exports.GoogleLogin = async (req, res) => {
     try {
@@ -178,11 +179,18 @@ exports.verifyOTPAndRegister = async (req, res) => {
         if (validOTP.expiresAt < new Date()) return res.status(400).json({ msg: "OTP expired" });
 
         const hashedPassword = await hashPassword(password);
-        await userModel.create({ name, email, password: hashedPassword });
+        const user = await userModel.create({ name, email, password: hashedPassword });
+        
+        await profileModel.create({
+            user: user._id,
+            name: user.name,
+            bio: '',
+            socials: {},
+          });
 
         await OTP.deleteOne({ email });
 
-        const token = generateToken(req.body); // Generate JWT
+        const token = generateToken(user); // Generate JWT
 
         res.json({ success: true, msg: "User registered successfully!", token });
 

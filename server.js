@@ -3,6 +3,7 @@ const cors = require("cors");
 require("dotenv").config();
 const passport = require("./config/passport");
 const authRoute = require("./routes/authRoutes.js");
+const profileRoute = require("./routes/profileRoutes.js");
 const connectDB = require("./config/db.js");
 
 const app = express();
@@ -13,7 +14,9 @@ app.use(cors());
 connectDB();
 app.use(passport.initialize());
 
+// Routes
 app.use("/auth", authRoute);
+app.use('/profile', profileRoute);
 
 app.get("/", (req, res) => {
     res.send("Server running successfully");
