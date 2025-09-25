@@ -1,0 +1,31 @@
+{
+  "name": "content-curation-backend",
+  "version": "1.0.0",
+  "description": "Backend for Content Curation & Library Management",
+  "main": "server.js",
+  
+  "scripts": {
+    "dev": "nodemon server.js",
+    "start": "node server.js"
+  
+},
+  "keywords": [
+    "nodejs",
+    "express",
+    "mongodb",
+    "content-curation",
+    "api"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.6.1",
+    "express": "^4.21.2",
+    "mongoose": "^7.8.7",
+    "node-cron": "^3.0.3"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}
