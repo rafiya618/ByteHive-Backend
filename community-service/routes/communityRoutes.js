@@ -14,6 +14,7 @@ import {
   getAllCommunities
 } from '../controllers/communityController.js';
 import { upload } from '../config/cloudinary.js';
+import { addPostToCommunity, removePostFromCommunity } from '../controllers/communityController.js';
 
 const router = express.Router();
 
@@ -38,5 +39,9 @@ router.patch('/:communityId/settings', updateCommunitySettings);
 // Moderator Management
 router.post('/:communityId/moderators', addModerator);
 router.delete('/:communityId/moderators/:userId', removeModerator);
+
+// Add/Remove Posts to/from Community
+router.post('/:communityId/posts', addPostToCommunity);
+router.delete('/:communityId/posts/:postId', removePostFromCommunity);
 
 export default router;

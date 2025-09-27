@@ -25,6 +25,9 @@ const communitySchema = new mongoose.Schema({
   members: [{
     type: String,
   }],
+  posts: [{
+    type: String,
+  }],
   no_of_followers: {
     type: Number,
     default: 0,

@@ -1,18 +1,94 @@
 import Community from '../models/Community.js';
 import { cloudinary, uploadToCloudinary } from '../config/cloudinary.js';
 
+// Helper function to check authorization
+const checkCommunityAuthorization = (community, userId, requireAdminOnly = false) => {
+  if (!userId) {
+    return { authorized: false, message: 'User ID is required for authorization' };
+  }
+  
+  const isAdmin = community.user_id === userId; // Fixed: use user_id from database
+  const isModerator = community.moderators.includes(userId);
+  
+  if (requireAdminOnly && !isAdmin) {
+    return { authorized: false, message: 'Access denied. Only admin can perform this action.' };
+  }
+  
+  if (!isAdmin && !isModerator) {
+    return { authorized: false, message: 'Access denied. Only admin and moderators can perform this action.' };
+  }
+  
+  return { authorized: true };
+};
+
+// Helper function to handle image upload
+const handleImageUpload = async (file, existingImageUrl = null) => {
+  if (!file || !file.buffer) return null;
+  
+  console.log('File received:', {
+    originalname: file.originalname,
+    mimetype: file.mimetype,
+    size: file.buffer.length
+  });
+  
+  // Validate file
+  if (!file.mimetype.startsWith('image/')) {
+    throw new Error('Only image files are allowed');
+  }
+  
+  if (file.buffer.length > 5 * 1024 * 1024) {
+    throw new Error('File size too large. Maximum 5MB allowed.');
+  }
+  
+  // Delete old image if exists and not default
+  if (existingImageUrl && !existingImageUrl.includes('unsplash.com')) {
+    try {
+      const urlParts = existingImageUrl.split('/');
+      const publicIdWithExtension = urlParts[urlParts.length - 1];
+      const publicId = publicIdWithExtension.split('.')[0];
+      const fullPublicId = `community-images/${publicId}`;
+      console.log('Deleting old image:', fullPublicId);
+      await cloudinary.uploader.destroy(fullPublicId);
+    } catch (deleteError) {
+      console.log('Error deleting old image:', deleteError.message);
+    }
+  }
+  
+  const result = await uploadToCloudinary(file.buffer, 'community-images');
+  return result.secure_url;
+};
+
+// Helper function to delete image from Cloudinary
+const deleteImageFromCloudinary = async (imageUrl) => {
+  if (!imageUrl || imageUrl.includes('unsplash.com')) return;
+  
+  try {
+    const urlParts = imageUrl.split('/');
+    const publicIdWithExtension = urlParts[urlParts.length - 1];
+    const publicId = publicIdWithExtension.split('.')[0];
+    const fullPublicId = `community-images/${publicId}`;
+    console.log('Deleting image:', fullPublicId);
+    await cloudinary.uploader.destroy(fullPublicId);
+  } catch (deleteError) {
+    console.log('Error deleting image from cloudinary:', deleteError.message);
+  }
+};
+
+// Helper function to normalize community tags
+const normalizeCommunityTags = (tags) => {
+  let communityTags = tags || [];
+  if (!Array.isArray(communityTags)) {
+    communityTags = communityTags ? [communityTags] : [];
+  }
+  return communityTags;
+};
+
 // == Create Community 
 export const createCommunity = async (req, res) => {
   try {
-    const { community_name, description, visible, moderation, user_id } = req.body;
-    let community_tags = req.body['community_tags[]'] || req.body.community_tags || [];
-    
-    // Ensure community_tags is always an array
-    if (!Array.isArray(community_tags)) {
-      community_tags = community_tags ? [community_tags] : [];
-    }
-    
-    // Check if community name already exists
+    const { community_name, description, visible, moderation, userId } = req.body;
+    const communityTags = normalizeCommunityTags(req.body['community_tags[]'] || req.body.community_tags);
+
     const existingCommunity = await Community.findOne({ community_name });
     if (existingCommunity) {
       return res.status(400).json({ message: 'Community name already exists' });
@@ -21,52 +97,27 @@ export const createCommunity = async (req, res) => {
     const communityData = {
       community_name,
       description,
-      user_id, // Using dummy user_id
-      community_tags: community_tags,
+      user_id: userId, // Fixed: use user_id for database
+      community_tags: communityTags,
       visible: visible || 'public',
       moderation: moderation || 'only admin',
+      image: "https://images.unsplash.com/photo-1519389950473-47ba0277781c?auto=format&fit=crop&w=600&q=80"
     };
 
-    console.log('Creating community with data:', communityData);
-
-    // Handle image upload or set default
-    if (req.file && req.file.buffer) {
-      try {
-        console.log('File received:', {
-          originalname: req.file.originalname,
-          mimetype: req.file.mimetype,
-          size: req.file.buffer.length
-        });
-        
-        // Validate file
-        if (!req.file.mimetype.startsWith('image/')) {
-          return res.status(400).json({ message: 'Only image files are allowed' });
-        }
-        
-        if (req.file.buffer.length > 5 * 1024 * 1024) {
-          return res.status(400).json({ message: 'File size too large. Maximum 5MB allowed.' });
-        }
-
-        console.log('Uploading image to Cloudinary...');
-        const result = await uploadToCloudinary(req.file.buffer, 'community-images');
-        console.log('Cloudinary upload result:', result.secure_url);
-        communityData.image = result.secure_url;
-      } catch (uploadError) {
-        console.error('Image upload error:', uploadError);
-        return res.status(400).json({ 
-          message: 'Image upload failed', 
-          error: uploadError.message || 'Unknown upload error'
-        });
+    try {
+      const imageUrl = await handleImageUpload(req.file);
+      if (imageUrl) {
+        communityData.image = imageUrl;
       }
-    } else {
-      // Set default avatar if no image provided
-      communityData.image = "https://images.unsplash.com/photo-1519389950473-47ba0277781c?auto=format&fit=crop&w=600&q=80";
+    } catch (uploadError) {
+      return res.status(400).json({ 
+        message: 'Image upload failed', 
+        error: uploadError.message 
+      });
     }
 
     const community = new Community(communityData);
     await community.save();
-
-    // Remove populate since we're using dummy user_id
     
     res.status(201).json({
       message: 'Community created successfully',
@@ -82,22 +133,21 @@ export const createCommunity = async (req, res) => {
 export const updateCommunity = async (req, res) => {
   try {
     const { communityId } = req.params;
-    const { community_name, description, visible, moderation } = req.body;
-    let community_tags = req.body['community_tags[]'] || req.body.community_tags || [];
-    
-    // Ensure community_tags is always an array
-    if (!Array.isArray(community_tags)) {
-      community_tags = community_tags ? [community_tags] : [];
-    }
+    const { community_name, description, visible, moderation, userId } = req.body;
+    const communityTags = normalizeCommunityTags(req.body['community_tags[]'] || req.body.community_tags);
 
     const community = await Community.findById(communityId);
     if (!community) {
       return res.status(404).json({ message: 'Community not found' });
     }
 
-    // Remove auth check - anyone can update now
+    // Authorization check
+    const authCheck = checkCommunityAuthorization(community, userId);
+    if (!authCheck.authorized) {
+      return res.status(authCheck.message.includes('required') ? 401 : 403).json({ message: authCheck.message });
+    }
 
-    // Check if new name already exists (only if name is being changed)
+    // Check if new name already exists
     if (community_name && community_name !== community.community_name) {
       const existingCommunity = await Community.findOne({ community_name });
       if (existingCommunity) {
@@ -108,53 +158,21 @@ export const updateCommunity = async (req, res) => {
     const updateData = {};
     if (community_name) updateData.community_name = community_name;
     if (description) updateData.description = description;
-    if (community_tags.length > 0) updateData.community_tags = community_tags;
+    if (communityTags.length > 0) updateData.community_tags = communityTags;
     if (visible) updateData.visible = visible;
     if (moderation) updateData.moderation = moderation;
 
     // Handle image update
-    if (req.file && req.file.buffer) {
-      try {
-        console.log('File received for update:', {
-          originalname: req.file.originalname,
-          mimetype: req.file.mimetype,
-          size: req.file.buffer.length
-        });
-        
-        // Validate file
-        if (!req.file.mimetype.startsWith('image/')) {
-          return res.status(400).json({ message: 'Only image files are allowed' });
-        }
-        
-        if (req.file.buffer.length > 5 * 1024 * 1024) {
-          return res.status(400).json({ message: 'File size too large. Maximum 5MB allowed.' });
-        }
-
-        // Delete old image from Cloudinary if it's not the default
-        if (community.image && !community.image.includes('unsplash.com')) {
-          try {
-            const urlParts = community.image.split('/');
-            const publicIdWithExtension = urlParts[urlParts.length - 1];
-            const publicId = publicIdWithExtension.split('.')[0];
-            const fullPublicId = `community-images/${publicId}`;
-            console.log('Deleting old image:', fullPublicId);
-            await cloudinary.uploader.destroy(fullPublicId);
-          } catch (deleteError) {
-            console.log('Error deleting old image:', deleteError.message);
-            // Continue with upload even if delete fails
-          }
-        }
-
-        const result = await uploadToCloudinary(req.file.buffer, 'community-images');
-        updateData.image = result.secure_url;
-        console.log('New image uploaded:', result.secure_url);
-      } catch (uploadError) {
-        console.error('Image upload error during update:', uploadError);
-        return res.status(400).json({
-          message: 'Image upload failed',
-          error: uploadError.message || 'Unknown upload error',
-        });
+    try {
+      const imageUrl = await handleImageUpload(req.file, community.image);
+      if (imageUrl) {
+        updateData.image = imageUrl;
       }
+    } catch (uploadError) {
+      return res.status(400).json({
+        message: 'Image upload failed',
+        error: uploadError.message,
+      });
     }
 
     const updatedCommunity = await Community.findByIdAndUpdate(communityId, updateData, {
@@ -175,28 +193,21 @@ export const updateCommunity = async (req, res) => {
 export const deleteCommunity = async (req, res) => {
   try {
     const { communityId } = req.params;
+    const { userId } = req.body;
 
     const community = await Community.findById(communityId);
     if (!community) {
       return res.status(404).json({ message: 'Community not found' });
     }
 
-    // Remove auth check - anyone can delete now
-
-    // Delete image from Cloudinary if exists and not default
-    if (community.image && !community.image.includes('unsplash.com')) {
-      try {
-        const urlParts = community.image.split('/');
-        const publicIdWithExtension = urlParts[urlParts.length - 1];
-        const publicId = publicIdWithExtension.split('.')[0];
-        const fullPublicId = `community-images/${publicId}`;
-        console.log('Deleting community image:', fullPublicId);
-        await cloudinary.uploader.destroy(fullPublicId);
-      } catch (deleteError) {
-        console.log('Error deleting image from cloudinary:', deleteError.message);
-        // Continue with community deletion even if image delete fails
-      }
+    // Authorization check - only admin can delete
+    const authCheck = checkCommunityAuthorization(community, userId, true);
+    if (!authCheck.authorized) {
+      return res.status(authCheck.message.includes('required') ? 401 : 403).json({ message: authCheck.message });
     }
+
+    // Delete image from Cloudinary
+    await deleteImageFromCloudinary(community.image);
 
     await Community.findByIdAndDelete(communityId);
 
@@ -254,8 +265,7 @@ export const getCommunityDetails = async (req, res) => {
       return res.status(404).json({ message: 'Community not found' });
     }
 
-    // Increment view count
-    await Community.findByIdAndUpdate(communityId, { $inc: { no_of_views: 1 } });
+    // Removed: await Community.findByIdAndUpdate(communityId, { $inc: { no_of_views: 1 } });
 
     res.json({ community });
   } catch (error) {
@@ -267,34 +277,23 @@ export const getCommunityDetails = async (req, res) => {
 export const followCommunity = async (req, res) => {
   try {
     const { communityId } = req.params;
-    const { userId } = req.body; // Get userId from request body instead of auth
-
-    // Handle dummy community IDs that start with 'discover-'
-    if (communityId.startsWith('discover-') || communityId.startsWith('owned-')) {
-      // For dummy communities, just return success
-      return res.json({ 
-        message: 'Successfully followed community',
-        success: true,
-        communityId: communityId
-      });
+    const { userId } = req.body;
+    
+    if (!userId) {
+      return res.status(400).json({ message: 'User ID is required' });
     }
 
-    // For real communities in database
     const community = await Community.findById(communityId);
     if (!community) {
       return res.status(404).json({ message: 'Community not found' });
     }
 
-    // Use userId from request body or default
-    const userIdToUse = userId || 'dummy-user-id-123';
-
-    // Check if already following
-    if (community.members.includes(userIdToUse)) {
+    if (community.members.includes(userId)) {
       return res.status(400).json({ message: 'Already following this community' });
     }
 
     await Community.findByIdAndUpdate(communityId, {
-      $push: { members: userIdToUse },
+      $push: { members: userId },
       $inc: { no_of_followers: 1 },
     });
 
@@ -312,34 +311,23 @@ export const followCommunity = async (req, res) => {
 export const unfollowCommunity = async (req, res) => {
   try {
     const { communityId } = req.params;
-    const { userId } = req.body; // Get userId from request body instead of auth
+    const { userId } = req.body;
 
-    // Handle dummy community IDs
-    if (communityId.startsWith('discover-') || communityId.startsWith('owned-')) {
-      // For dummy communities, just return success
-      return res.json({ 
-        message: 'Successfully unfollowed community',
-        success: true,
-        communityId: communityId
-      });
+    if (!userId) {
+      return res.status(400).json({ message: 'User ID is required' });
     }
 
-    // For real communities in database
     const community = await Community.findById(communityId);
     if (!community) {
       return res.status(404).json({ message: 'Community not found' });
     }
 
-    // Use userId from request body or default
-    const userIdToUse = userId || 'dummy-user-id-123';
-
-    // Check if not following
-    if (!community.members.includes(userIdToUse)) {
+    if (!community.members.includes(userId)) {
       return res.status(400).json({ message: 'Not following this community' });
     }
 
     await Community.findByIdAndUpdate(communityId, {
-      $pull: { members: userIdToUse },
+      $pull: { members: userId },
       $inc: { no_of_followers: -1 },
     });
 
@@ -357,14 +345,18 @@ export const unfollowCommunity = async (req, res) => {
 export const updateCommunitySettings = async (req, res) => {
   try {
     const { communityId } = req.params;
-    const { visible, moderation } = req.body;
+    const { visible, moderation, userId } = req.body;
 
     const community = await Community.findById(communityId);
     if (!community) {
       return res.status(404).json({ message: 'Community not found' });
     }
 
-    // Remove auth check - anyone can update settings now
+    // Authorization check
+    const authCheck = checkCommunityAuthorization(community, userId);
+    if (!authCheck.authorized) {
+      return res.status(authCheck.message.includes('required') ? 401 : 403).json({ message: authCheck.message });
+    }
 
     const updateData = {};
     if (visible) updateData.visible = visible;
@@ -387,24 +379,29 @@ export const updateCommunitySettings = async (req, res) => {
 export const addModerator = async (req, res) => {
   try {
     const { communityId } = req.params;
-    const { userId } = req.body; // Get userId from request body instead of username lookup
+    const { userId, moderatorUserId } = req.body;
 
     const community = await Community.findById(communityId);
     if (!community) {
       return res.status(404).json({ message: 'Community not found' });
     }
 
-    // Remove auth check - anyone can add moderators now
+    // Authorization check - only admin can add moderators
+    const authCheck = checkCommunityAuthorization(community, userId, true);
+    if (!authCheck.authorized) {
+      return res.status(authCheck.message.includes('required') ? 401 : 403).json({ message: authCheck.message });
+    }
 
-    const userIdToAdd = userId || 'dummy-moderator-id-123';
+    if (!moderatorUserId) {
+      return res.status(400).json({ message: 'Moderator user ID is required' });
+    }
 
-    // Check if already a moderator
-    if (community.moderators.includes(userIdToAdd)) {
+    if (community.moderators.includes(moderatorUserId)) {
       return res.status(400).json({ message: 'User is already a moderator' });
     }
 
     await Community.findByIdAndUpdate(communityId, {
-      $push: { moderators: userIdToAdd },
+      $push: { moderators: moderatorUserId },
     });
 
     res.json({ message: 'Moderator added successfully' });
@@ -416,17 +413,22 @@ export const addModerator = async (req, res) => {
 // ==Remove Moderator
 export const removeModerator = async (req, res) => {
   try {
-    const { communityId, userId } = req.params;
+    const { communityId, moderatorUserId } = req.params;
+    const { userId } = req.body;
 
     const community = await Community.findById(communityId);
     if (!community) {
       return res.status(404).json({ message: 'Community not found' });
     }
 
-    // Remove auth check - anyone can remove moderators now
+    // Authorization check - only admin can remove moderators
+    const authCheck = checkCommunityAuthorization(community, userId, true);
+    if (!authCheck.authorized) {
+      return res.status(authCheck.message.includes('required') ? 401 : 403).json({ message: authCheck.message });
+    }
 
     await Community.findByIdAndUpdate(communityId, {
-      $pull: { moderators: userId },
+      $pull: { moderators: moderatorUserId },
     });
 
     res.json({ message: 'Moderator removed successfully' });
@@ -465,46 +467,224 @@ export const getAllCommunities = async (req, res) => {
 // == Get User's Communities
 export const getUserCommunities = async (req, res) => {
   try {
-    const { userId } = req.params || req.body; // Get userId from params or body
+    const { userId } = req.params || req.body;
     const { search } = req.query;
     
     if (!userId) {
       return res.status(400).json({ message: 'User ID is required' });
     }
     
-    let query = { user_id: userId };
+    let query = { user_id: userId }; // Fixed: use user_id for database query
     let memberQuery = { members: userId };
     
     // Add search functionality
     if (search && search.trim()) {
       const searchRegex = { $regex: search.trim(), $options: 'i' };
-      query.$or = [
+      const searchCondition = [
         { community_name: searchRegex },
         { description: searchRegex }
       ];
-      memberQuery.$or = [
-        { community_name: searchRegex },
-        { description: searchRegex }
-      ];
-      // Keep the member condition
+      
+      query.$or = searchCondition;
       memberQuery.$and = [
         { members: userId },
-        { $or: memberQuery.$or }
+        { $or: searchCondition }
       ];
-      delete memberQuery.$or;
     }
     
-    const ownedCommunities = await Community.find(query)
-      .sort({ createdAt: -1 });
-
-    const followedCommunities = await Community.find(memberQuery)
-      .sort({ createdAt: -1 });
+    const ownedCommunities = await Community.find(query).sort({ createdAt: -1 });
+    const followedCommunities = await Community.find(memberQuery).sort({ createdAt: -1 });
 
     res.json({
       owned: ownedCommunities,
       followed: followedCommunities,
     });
   } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+// Add these new endpoints to your existing Community controller
+
+// ==Add Post to Community (increment post count and add post ID to posts array)
+export const addPostToCommunity = async (req, res) => {
+  try {
+    const { communityId } = req.params;
+    const { userId, postId } = req.body;
+
+    console.log('Adding post to community:', { communityId, userId, postId });
+
+    if (!userId || !postId) {
+      return res.status(400).json({ message: 'User ID and Post ID are required' });
+    }
+
+    const community = await Community.findById(communityId);
+    if (!community) {
+      return res.status(404).json({ message: 'Community not found' });
+    }
+
+    // Authorization check - anyone who can post can add to count
+    const isAdmin = community.user_id === userId;
+    const isModerator = community.moderators.includes(userId);
+    const isFollower = community.members.includes(userId);
+
+    let canPost = false;
+    
+    switch (community.moderation) {
+      case 'only admin':
+        canPost = isAdmin;
+        break;
+      case 'allow moderators':
+        canPost = isAdmin || isModerator;
+        break;
+      case 'allow all':
+        canPost = isAdmin || isModerator || isFollower;
+        break;
+      default:
+        canPost = isAdmin;
+    }
+
+    if (!canPost) {
+      return res.status(403).json({ message: 'Access denied. You cannot post in this community.' });
+    }
+
+    // Check if post ID already exists in the posts array
+    if (community.posts.includes(postId)) {
+      return res.status(400).json({ message: 'Post already added to community' });
+    }
+
+    // Add post ID to posts array and increment post count
+    const updatedCommunity = await Community.findByIdAndUpdate(
+      communityId, 
+      {
+        $push: { posts: postId },
+        $inc: { no_of_posts: 1 }
+      },
+      { new: true }
+    );
+
+    console.log('Community updated successfully:', {
+      communityId,
+      postId,
+      newPostCount: updatedCommunity.no_of_posts,
+      totalPostsInArray: updatedCommunity.posts.length
+    });
+
+    res.json({ 
+      message: 'Post added to community successfully',
+      success: true,
+      community: {
+        _id: updatedCommunity._id,
+        no_of_posts: updatedCommunity.no_of_posts,
+        posts: updatedCommunity.posts
+      }
+    });
+  } catch (error) {
+    console.error('Add post to community error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+// ==Remove Post from Community (decrement post count and remove post ID from posts array)
+export const removePostFromCommunity = async (req, res) => {
+  try {
+    const { communityId, postId } = req.params;
+    const { userId } = req.body;
+
+    console.log('Removing post from community:', { communityId, postId, userId });
+
+    if (!userId) {
+      return res.status(400).json({ message: 'User ID is required' });
+    }
+
+    const community = await Community.findById(communityId);
+    if (!community) {
+      return res.status(404).json({ message: 'Community not found' });
+    }
+
+    // Authorization check - post owner, admin, or moderator can remove
+    const isAdmin = community.user_id === userId;
+    const isModerator = community.moderators.includes(userId);
+
+    if (!isAdmin && !isModerator) {
+      // For now, allow any authenticated user (assuming they own the post)
+      // In a real app, you'd verify post ownership here
+      console.log('Non-admin/moderator attempting to remove post, allowing for now');
+    }
+
+    // Check if post ID exists in the posts array
+    if (!community.posts.includes(postId)) {
+      return res.status(404).json({ message: 'Post not found in community' });
+    }
+
+    // Remove post ID from posts array and decrement post count
+    const updatedCommunity = await Community.findByIdAndUpdate(
+      communityId,
+      {
+        $pull: { posts: postId },
+        $inc: { no_of_posts: -1 }
+      },
+      { new: true }
+    );
+
+    // Ensure post count doesn't go below 0
+    if (updatedCommunity.no_of_posts < 0) {
+      await Community.findByIdAndUpdate(communityId, { no_of_posts: 0 });
+      updatedCommunity.no_of_posts = 0;
+    }
+
+    console.log('Post removed from community successfully:', {
+      communityId,
+      postId,
+      newPostCount: updatedCommunity.no_of_posts,
+      totalPostsInArray: updatedCommunity.posts.length
+    });
+
+    res.json({ 
+      message: 'Post removed from community successfully',
+      success: true,
+      community: {
+        _id: updatedCommunity._id,
+        no_of_posts: updatedCommunity.no_of_posts,
+        posts: updatedCommunity.posts
+      }
+    });
+  } catch (error) {
+    console.error('Remove post from community error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+// ==Get Community Posts (get all posts for a community)
+export const getCommunityPosts = async (req, res) => {
+  try {
+    const { communityId } = req.params;
+    const { page = 1, limit = 10 } = req.query;
+
+    const community = await Community.findById(communityId);
+    if (!community) {
+      return res.status(404).json({ message: 'Community not found' });
+    }
+
+    // Return the posts array with pagination info
+    const startIndex = (page - 1) * limit;
+    const endIndex = startIndex + parseInt(limit);
+    const paginatedPosts = community.posts.slice(startIndex, endIndex);
+
+    res.json({
+      success: true,
+      community: {
+        _id: community._id,
+        community_name: community.community_name,
+        no_of_posts: community.no_of_posts,
+        posts: paginatedPosts,
+        totalPosts: community.posts.length,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        totalPages: Math.ceil(community.posts.length / limit)
+      }
+    });
+  } catch (error) {
+    console.error('Get community posts error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
