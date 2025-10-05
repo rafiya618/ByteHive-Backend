@@ -5,67 +5,116 @@ import notificationModel from "./models/notificationModel.js";
 import Preference from "./models/preferencesModel.js";
 import sendEmail from "./helpers/sendEmail.js";
 import notificationCacheModel from "./models/notificationCacheModel.js";
-import Subscription from "./models/subscriptionModel.js"; // 🔹 User push subscriptions
-import { sendPush } from "./helpers/push.js"; // 🔹 Push sender
+import Subscription from "./models/subscriptionModel.js";
+import { sendPush } from "./helpers/push.js";
+import { buildNotificationUrl } from "./helpers/buildNotificationUrl.js";
+import { updateAggregation } from "./helpers/aggregateNotification.js"; // ✅ Updated helper
+import { cascadeDeletion } from "./helpers/cascadeDeletion.js";
 
-// 1. Await redis clients
 const { sub } = await createRedisClients();
-
-// 2. Connect socket.io client (only if gateway server is running on :4000)
 const socket = io("http://localhost:4000");
 
-// 🔹 Default preferences
 const defaultPrefs = {
   global: { inApp: true, push: false, email: false },
   perType: {
-    mention: { inApp: true, push: true, email: false },
-    reply: { inApp: true, push: true, email: false },
-    like: { inApp: true, push: false, email: false },
+    activities: {
+      likePost: { inApp: true, push: false, email: false },
+      likeComment: { inApp: true, push: false, email: false },
+      comment: { inApp: true, push: false, email: false },
+      reply: { inApp: true, push: false, email: false },
+      mention: { inApp: true, push: true, email: false }
+    },
+    network: {
+      follow: { inApp: true, push: false, email: false },
+      friendRequest: { inApp: true, push: false, email: false },
+      connectionAccepted: { inApp: true, push: false, email: false }
+    },
+    updates: {
+      newPost: { inApp: true, push: false, email: false },
+      storyUpdate: { inApp: true, push: false, email: false },
+      liveStream: { inApp: true, push: false, email: false },
+      eventInvite: { inApp: true, push: false, email: false }
+    },
     system: { inApp: false, push: false, email: true },
     security: { inApp: false, push: false, email: true }
   }
 };
 
-// 🔹 Helper: build email subject + body
+function getPerTypePreference(prefs, triggerType) {
+  const mapping = {
+    likePost: "activities.likePost",
+    likeComment: "activities.likeComment",
+    comment: "activities.comment",
+    reply: "activities.reply",
+    mention: "activities.mention",
+    follow: "network.follow",
+    friendRequest: "network.friendRequest",
+    connectionAccepted: "network.connectionAccepted",
+    newPost: "updates.newPost",
+    storyUpdate: "updates.storyUpdate",
+    liveStream: "updates.liveStream",
+    eventInvite: "updates.eventInvite",
+    system: "system",
+    security: "security",
+  };
+
+  const path = mapping[triggerType];
+  return (
+    path?.split(".").reduce((acc, key) => acc?.[key], prefs.perType) ||
+    path?.split(".").reduce((acc, key) => acc?.[key], defaultPrefs.perType) || {
+      inApp: true,
+      push: false,
+      email: false,
+    }
+  );
+}
+
 function buildEmailContent(payload) {
-  let subject = "New Notification from ByteHive";
-  let body = `<p>${payload.message}</p>`;
+  console.log('payload', payload)
+  let subject = payload.message || "New Notification from ByteHive";
+  let headline = payload.message || "You have a new notification";
+  let message = payload.message;
 
-  switch (payload.triggerType) {
-    case "reply":
-      subject = "Someone replied to your comment";
-      break;
-    case "comment":
-      subject = "New comment on your post";
-      break;
-    case "like":
-      subject = "Your post got a like";
-      break;
-    case "mention":
-      subject = "You were mentioned in a post";
-      break;
-    case "system":
-      subject = "System Notification";
-      body = `<p><strong>System Message:</strong> ${payload.message}</p>`;
-      break;
-    case "security":
-      subject = "Security Alert";
-      body = `<p><strong>Security Notice:</strong> ${payload.message}</p>`;
-      break;
-    default:
-      subject = `New ${payload.triggerType} notification`;
-  }
+  // Use payload.navigate or fallback to homepage
+  const notificationUrl = payload.navigate ;
 
-  // Add some branding
-  body += `<br/><hr/><p style="font-size:12px;color:gray">This is an automated message from ByteHive.</p>`;
+  const body = `
+  <div style="background-color:#f9fafb; padding:40px 0; font-family:Arial, Helvetica, sans-serif; color:#333;">
+    <div style="max-width:600px; background:#fff; margin:0 auto; border-radius:12px; overflow:hidden; box-shadow:0 2px 8px rgba(0,0,0,0.05);">
+      <!-- Header -->
+      <div style="background:linear-gradient(90deg, #4F46E5, #3B82F6); padding:20px 30px; color:white; text-align:center;">
+        <h1 style="margin:0; font-size:24px; letter-spacing:0.5px;">ByteHive</h1>
+      </div>
+
+      <!-- Body -->
+      <div style="padding:30px;">
+        <h2 style="color:#111827; font-size:20px; margin-bottom:10px;">${headline}</h2>
+        <p style="font-size:16px; line-height:1.6; color:#374151;">${message}</p>
+
+        <div style="margin-top:25px; text-align:center;">
+          <a href="http://localhost:5173${notificationUrl}" 
+             style="background-color:#4F46E5; color:white; padding:10px 20px; border-radius:6px; text-decoration:none; font-weight:bold; display:inline-block;">
+             Click To View
+          </a>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div style="background-color:#f3f4f6; padding:15px 20px; text-align:center; font-size:12px; color:#6b7280;">
+        <p>This is an automated message from <strong>ByteHive</strong>.</p>
+        <p>© ${new Date().getFullYear()} ByteHive, All rights reserved.</p>
+      </div>
+    </div>
+  </div>`;
+
   return { subject, body };
 }
 
-// 3. User created cache handler
+// --- Redis Subscriptions ---
+
 await sub.subscribe("userCache:events", async (message) => {
   try {
     const { event, payload } = JSON.parse(message);
-
     if (event === "userCache:created" || event === "userCache:updated") {
       await notificationCacheModel.findByIdAndUpdate(
         payload.id,
@@ -84,148 +133,149 @@ await sub.subscribe("userCache:events", async (message) => {
   }
 });
 
-// 4. Notification event handler
 await sub.subscribe("notification:event", async (message) => {
   try {
     const { notificationPayload: payload } = JSON.parse(message);
-    console.log("📩 Notification payload in subscriber:", payload);
-
-    // 🔹 Handle system/security immediately → email only, no DB
+    console.log('payload in notification', payload)
     if (payload.entityType === "security" || payload.entityType === "system") {
-      console.log("📧 Sending system/security email");
       await sendEmail(payload.receiverEmail, payload.triggerType, payload.message);
-      console.log("✅ Email finished");
       return;
     }
 
-    // 🛑 Skip self-notifications
     if (payload.receiverId === payload.senderId) return;
 
-    // 🔹 1. Preferences
-    let prefs = await Preference.findOne({ userId: payload.receiverId });
-    if (!prefs) prefs = defaultPrefs;
-
-    const perType =
-      prefs.perType?.[payload.triggerType] ||
-      defaultPrefs.perType[payload.triggerType] ||
-      { inApp: true, push: false, email: false };
+    let prefs = await Preference.findOne({ userId: payload.receiverId }) || defaultPrefs;
+    const perType = getPerTypePreference(prefs, payload.triggerType);
 
     const allowedChannels = [];
     if (prefs.global.inApp && perType.inApp) allowedChannels.push("in-app");
     if (prefs.global.push && perType.push) allowedChannels.push("push");
     if (prefs.global.email && perType.email) allowedChannels.push("email");
+    if (!allowedChannels.includes("in-app")) allowedChannels.push("in-app");
 
-    // Always ensure at least in-app exists
-    if (!allowedChannels.includes("in-app")) {
-      allowedChannels.push("in-app");
-    }
-
-    // 🔹 2. Grouping key (for aggregation)
     const groupKey = `${payload.triggerType}:${payload.entityType}:${payload.entityId}`;
-
-    // 🔹 3. Check if existing notification exists
     let existing = await notificationModel.findOne({
       receiverId: payload.receiverId,
       groupKey,
-      status: "unread"
+      status: "unread",
     });
-    console.log('existing', existing)
-    const sender = await notificationCacheModel.findById(payload.senderId)
+
+    const sender = await notificationCacheModel.findById(payload.senderId);
 
     if (existing) {
-      // ✅ Update existing aggregated notification
-      if (!existing.meta.lastActors.includes(sender.username)) {
-        existing.meta.lastActors.push(sender.username);
-        if (existing.meta.lastActors.length > 3) {
-          existing.meta.lastActors = existing.meta.lastActors.slice(-3);
-        }
-      }
 
-      existing.meta.count += 1;
+      updateAggregation(existing, sender.username, payload.triggerType, "add", payload.triggerId);
       existing.channels = allowedChannels;
-      existing.updatedAt = new Date();
-
-      // 🔹 Smart message builder
-      const actors = existing.meta.lastActors;
-      const count = existing.meta.count;
-
-      switch (payload.triggerType) {
-        case "reply":
-          existing.message =
-            actors.length === 1
-              ? `${actors[0]} replied ${count} time${count > 1 ? "s" : ""} to your comment`
-              : `${actors.join(", ")} and others replied to your comment (${count} replies)`;
-          break;
-
-        case "comment":
-          existing.message =
-            actors.length === 1
-              ? `${actors[0]} commented ${count} time${count > 1 ? "s" : ""} on your post`
-              : `${actors.join(", ")} and others commented on your post (${count} comments)`;
-          break;
-
-        case "like":
-          existing.message =
-            actors.length === 1
-              ? `${actors[0]} liked your post`
-              : `${actors.join(", ")} and others liked your post`;
-          break;
-
-        default:
-          existing.message = `${actors.join(", ")} did ${payload.triggerType} (${count} times)`;
-      }
-
+      console.log('existing', existing)
+      existing.navigate = buildNotificationUrl(existing)
       await existing.save();
-
-      socket.emit("forward:event", {
-        type: "notification:update",
-        data: existing
-      });
+      socket.emit("forward:event", { type: "notification:update", data: existing });
     } else {
-      // ✅ Create new notification
-      const notification = await notificationModel.create({
+      const meta = {
+        count: 1,
+        lastActors: [sender.username],
+        triggerIds: new Map([[sender.username, [payload.triggerId]]]) // ✅ real Map
+      };
+
+      const notificationData = {
         ...payload,
         groupKey,
         channels: allowedChannels,
-        meta: { count: 1, lastActors: [sender.username] }
-      });
-      socket.emit("forward:event", {
-        type: "notification:new",
-        data: notification
-      });
+        meta,
+      };
 
-      console.log('allowedChannels before push: ', allowedChannels)
+      // ✅ Build URL using notificationData so meta is available
+      notificationData.navigate = buildNotificationUrl(notificationData);
+
+      // ✅ Save notification
+      const notification = await notificationModel.create(notificationData);
 
 
-      // 🔹 4. PUSH delivery if enabled
+
+      socket.emit("forward:event", { type: "notification:new", data: notification });
+
       if (allowedChannels.includes("push")) {
-        console.log('entered in push' )
         const subs = await Subscription.find({ userId: payload.receiverId });
+        console.log('sub', sub)
         for (const sub of subs) {
           await sendPush(
             {
               endpoint: sub.endpoint,
-              keys: sub.keys
+              keys: sub.keys,
             },
             JSON.stringify({
               title: "New Notification",
               body: payload.message,
+              url: notificationData.navigate,
               data: payload,
             })
           );
         }
       }
 
-      // 🔹 5. EMAIL delivery if enabled (non-system/security)
       if (allowedChannels.includes("email")) {
-         const { subject, body } = buildEmailContent(payload);
-         const user = await notificationCacheModel.findById(payload.receiverId)
-         console.log(`email: ${user.email}, ${subject}. ${body} `)
+        const { subject, body } = buildEmailContent(notification);
+        const user = await notificationCacheModel.findById(payload.receiverId);
         await sendEmail(user.email, subject, body);
       }
     }
-
   } catch (err) {
     console.error("❌ Failed to handle notification", err);
+  }
+});
+
+await sub.subscribe("notification:delete", async (message) => {
+  try {
+    const { payload } = JSON.parse(message)
+    const { receiverId, entityId, triggerType, commentId, entityType } = payload;
+    // console.log('JSON.parse(message)', JSON.parse(message))
+    console.log("paylaod in delte notification: ", payload);
+    console.log("type ", payload.type);
+    console.log("receiverId: ", receiverId);
+
+    if (payload?.type) {
+
+      cascadeDeletion(payload)
+    }
+    // ✅ Now we use index: (receiverId + groupKey)
+    const groupKey = `${triggerType}:${entityType}:${entityId}`;
+    console.log('groupKey', groupKey)
+    const notif = await notificationModel.findOne({
+      receiverId,
+      groupKey,
+    });
+    console.log('notif', notif)
+    if (!notif) {
+      console.log("⚠️ No matching aggregated notification found.");
+      return;
+    }
+
+    console.log('notif.meta.triggerIds', notif.meta.triggerIds)
+    // find which user’s triggerIds contain this commentId
+    let matchedUsername = null;
+    for (const [username, trigIds] of notif.meta.triggerIds.entries()) {
+      console.log(`👤 User: ${username}, Trigger IDs:`, trigIds);
+      if (Array.isArray(trigIds) && trigIds.includes(commentId)) {
+        matchedUsername = username;
+        console.log('matched usernam')
+        break;
+      }
+    }
+    console.log('matchedUsername', matchedUsername)
+    if (!matchedUsername) return;
+
+    updateAggregation(notif, matchedUsername, notif.triggerType, "remove", commentId);
+
+    if (notif.meta.count <= 0) {
+      await notif.deleteOne();
+    } else {
+      await notif.save();
+      socket.emit("forward:event", {
+        type: "notification:update",
+        data: notif
+      });
+    }
+  } catch (error) {
+    console.error("❌ Failed to handle notification deletion", error.message);
   }
 });

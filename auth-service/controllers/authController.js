@@ -5,19 +5,19 @@ import jwt from "jsonwebtoken";
 import OTP from "../models/otpModel.js";
 import profileModel from "../models/profileModel.js";
 import { createRedisClients } from "../../shared-config/redisClient.js";
+import { validateEmail, validatePassword, validateOtp } from "../helpers/validators.js"; // ✅ use shared validators
 
 const { pub } = await createRedisClients();
 
 // ===============================
-// Validation Helpers
+// Response Helper
 // ===============================
-const isValidEmail = (email) => {
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return email && emailRegex.test(email) && email.length <= 254;
-};
-
-const isValidPassword = (password) => {
-  return password && password.length >= 8 && password.length <= 128;
+const sendError = (res, status, field, message) => {
+  return res.status(status).json({
+    success: false,
+    field,
+    message,
+  });
 };
 
 // ===============================
@@ -25,14 +25,16 @@ const isValidPassword = (password) => {
 // ===============================
 export const GoogleLogin = async (req, res) => {
   try {
-    if (!req.user) return res.status(400).send("User authentication failed.");
+    if (!req.user) return sendError(res, 400, "system", "User authentication failed.");
 
-    console.log("req.user", req.user);
     const token = generateToken(req.user);
 
-    res.redirect(`${process.env.FRONTEND_URL}/google-auth?token=${token}`);
+    // Pass optional info.message for frontend toast
+    const msg = req.authInfo?.message ? `&message=${encodeURIComponent(req.authInfo.message)}` : "";
+
+    res.redirect(`${process.env.FRONTEND_URL}/google-auth?token=${token}${msg}`);
   } catch (error) {
-    res.status(500).send("Internal Server Error");
+    sendError(res, 500, "system", "Something went wrong. Please try again.");
   }
 };
 
@@ -42,15 +44,22 @@ export const GoogleLogin = async (req, res) => {
 export const Login = async (req, res) => {
   try {
     const { email, password } = req.body;
-    if (!isValidEmail(email) || !isValidPassword(password)) {
-      return res.status(400).json({ message: "Invalid email or password format!" });
-    }
+
+    const emailError = validateEmail(email);
+    if (emailError) return sendError(res, 400, "email", emailError);
+
+    // const passwordError = validatePassword(password);
+    // if (passwordError) return sendError(res, 400, "password", passwordError);
 
     const user = await userModel.findOne({ email });
-    if (!user) return res.status(404).json({ message: "User not found!" });
+    if (!user) {
+      return sendError(res, 404, "email", "User not found!");
+    }
 
     const isMatch = await comparePassword(password, user.password);
-    if (!isMatch) return res.status(401).json({ message: "Invalid Password!" });
+    if (!isMatch) {
+      return sendError(res, 401, "password", "Invalid Password!");
+    }
 
     const token = generateToken(user);
 
@@ -69,7 +78,7 @@ export const Login = async (req, res) => {
     res.json({ success: true, message: "Login successful!", token });
   } catch (err) {
     console.error("Login Error:", err);
-    res.status(500).json({ message: "Server error" });
+    sendError(res, 500, "system", "Something went wrong. Please try again.");
   }
 };
 
@@ -79,19 +88,19 @@ export const Login = async (req, res) => {
 export const forgotPassword = async (req, res) => {
   try {
     const { email } = req.body;
-    if (!isValidEmail(email)) {
-      return res.status(400).json({ message: "Invalid email format" });
-    }
+
+    const emailError = validateEmail(email);
+    if (emailError) return sendError(res, 400, "email", emailError);
 
     const user = await userModel.findOne({ email });
-    if (!user) return res.status(404).json({ message: "User not found!" });
+    if (!user) {
+      return sendError(res, 404, "email", "User not found!");
+    }
 
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    await OTP.findOneAndUpdate(
-      { email },
-      { otp, createdAt: new Date() },
-      { upsert: true }
-    );
+    const expiresAt = new Date(Date.now() + 60 * 1000); // 60s expiry
+
+    await OTP.findOneAndUpdate({ email }, { otp, expiresAt }, { upsert: true });
 
     await pub.publish(
       "notification:event",
@@ -100,7 +109,7 @@ export const forgotPassword = async (req, res) => {
           receiverEmail: email,
           entityType: "system",
           triggerType: "password-reset",
-          message: `<p>Your OTP is: <b>${otp}</b>. Valid for 5 minutes.</p>`,
+          message: `<p>Your OTP is: <b>${otp}</b>. Valid for 60 seconds.</p>`,
         },
       })
     );
@@ -108,7 +117,7 @@ export const forgotPassword = async (req, res) => {
     res.json({ success: true, message: "OTP sent to your email." });
   } catch (err) {
     console.error("Forgot Password Error:", err);
-    res.status(500).json({ message: "Server error" });
+    sendError(res, 500, "system", "Something went wrong. Please try again.");
   }
 };
 
@@ -118,22 +127,28 @@ export const forgotPassword = async (req, res) => {
 export const verifyResetOtp = async (req, res) => {
   try {
     const { email, otp } = req.body;
-    if (!isValidEmail(email) || !otp) {
-      return res.status(400).json({ message: "Invalid email or OTP" });
-    }
+
+    const emailError = validateEmail(email);
+    if (emailError) return sendError(res, 400, "email", emailError);
+
+    const otpError = validateOtp(otp);
+    if (otpError) return sendError(res, 400, "otp", otpError);
 
     const validOTP = await OTP.findOne({ email });
-    if (!validOTP) return res.status(400).json({ message: "OTP not found!" });
-
-    const elapsed = (Date.now() - new Date(validOTP.createdAt).getTime()) / 1000;
-    if (elapsed > 60) return res.status(400).json({ message: "OTP expired" });
-
-    if (validOTP.otp !== otp) return res.status(400).json({ message: "Invalid OTP" });
+    if (!validOTP) {
+      return sendError(res, 400, "otp", "OTP not found!");
+    }
+    if (validOTP.otp !== otp) {
+      return sendError(res, 400, "otp", "Invalid OTP");
+    }
+    if (validOTP.expiresAt < new Date()) {
+      return sendError(res, 400, "otp", "OTP expired");
+    }
 
     res.json({ success: true, message: "OTP verified" });
   } catch (err) {
     console.error("OTP Verification Error:", err);
-    res.status(500).json({ message: "Server error" });
+    sendError(res, 500, "system", "Something went wrong. Please try again.");
   }
 };
 
@@ -143,9 +158,12 @@ export const verifyResetOtp = async (req, res) => {
 export const resetPassword = async (req, res) => {
   try {
     const { email, password } = req.body;
-    if (!isValidEmail(email) || !isValidPassword(password)) {
-      return res.status(400).json({ message: "Invalid email or password format!" });
-    }
+
+    const emailError = validateEmail(email);
+    if (emailError) return sendError(res, 400, "email", emailError);
+
+    const passwordError = validatePassword(password);
+    if (passwordError) return sendError(res, 400, "password", passwordError);
 
     const hashedPassword = await hashPassword(password);
     await userModel.findOneAndUpdate({ email }, { password: hashedPassword });
@@ -155,7 +173,7 @@ export const resetPassword = async (req, res) => {
     res.json({ success: true, message: "Password reset successfully!" });
   } catch (err) {
     console.error("Reset Password Error:", err);
-    res.status(500).json({ message: "Server error" });
+    sendError(res, 500, "system", "Something went wrong. Please try again.");
   }
 };
 
@@ -165,13 +183,16 @@ export const resetPassword = async (req, res) => {
 export const Register = async (req, res) => {
   try {
     const { email, password } = req.body;
-    if (!isValidEmail(email) || !isValidPassword(password)) {
-      return res.status(400).json({ msg: "Invalid email or password format!" });
-    }
+
+    const emailError = validateEmail(email);
+    if (emailError) return sendError(res, 400, "email", emailError);
+
+    const passwordError = validatePassword(password);
+    if (passwordError) return sendError(res, 400, "password", passwordError);
 
     const existingEmail = await userModel.findOne({ email });
     if (existingEmail) {
-      return res.status(409).json({ message: "User already exists." });
+      return sendError(res, 409, "email", "User already exists.");
     }
 
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
@@ -198,7 +219,7 @@ export const Register = async (req, res) => {
     res.json({ success: true, message: "OTP sent to your email. Please verify." });
   } catch (error) {
     console.error("Error registering user:", error);
-    res.status(500).json({ message: "Server error" });
+    sendError(res, 500, "system", "Something went wrong. Please try again.");
   }
 };
 
@@ -208,9 +229,9 @@ export const Register = async (req, res) => {
 export const resendOTP = async (req, res) => {
   try {
     const { email } = req.body;
-    if (!isValidEmail(email)) {
-      return res.status(400).json({ msg: "Invalid email format" });
-    }
+
+    const emailError = validateEmail(email);
+    if (emailError) return sendError(res, 400, "email", emailError);
 
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     const expiresAt = new Date(Date.now() + 60 * 1000);
@@ -233,10 +254,10 @@ export const resendOTP = async (req, res) => {
       })
     );
 
-    res.json({ success: true, msg: "OTP resent successfully" });
+    res.json({ success: true, message: "OTP resent successfully" });
   } catch (error) {
     console.error("Error resending OTP:", error);
-    res.status(500).json({ msg: "Server error" });
+    sendError(res, 500, "system", "Something went wrong. Please try again.");
   }
 };
 
@@ -246,14 +267,26 @@ export const resendOTP = async (req, res) => {
 export const verifyOTPAndRegister = async (req, res) => {
   try {
     const { email, password, otp } = req.body;
-    if (!isValidEmail(email) || !isValidPassword(password) || !otp) {
-      return res.status(400).json({ msg: "Invalid input or OTP" });
-    }
+
+    const emailError = validateEmail(email);
+    if (emailError) return sendError(res, 400, "email", emailError);
+
+    const passwordError = validatePassword(password);
+    if (passwordError) return sendError(res, 400, "password", passwordError);
+
+    const otpError = validateOtp(otp);
+    if (otpError) return sendError(res, 400, "otp", otpError);
 
     const validOTP = await OTP.findOne({ email });
-    if (!validOTP) return res.status(400).json({ msg: "OTP not found" });
-    if (validOTP.otp !== otp) return res.status(400).json({ msg: "Invalid OTP" });
-    if (validOTP.expiresAt < new Date()) return res.status(400).json({ msg: "OTP expired" });
+    if (!validOTP) {
+      return sendError(res, 400, "otp", "OTP not found");
+    }
+    if (validOTP.otp !== otp) {
+      return sendError(res, 400, "otp", "Invalid OTP");
+    }
+    if (validOTP.expiresAt < new Date()) {
+      return sendError(res, 400, "otp", "OTP expired");
+    }
 
     const hashedPassword = await hashPassword(password);
     const user = await userModel.create({
@@ -265,9 +298,9 @@ export const verifyOTPAndRegister = async (req, res) => {
     await OTP.deleteOne({ email });
     const token = generateToken(user);
 
-    res.json({ success: true, msg: "User registered successfully!", token });
+    res.json({ success: true, message: "User registered successfully!", token });
   } catch (error) {
     console.error("Error verifying OTP:", error);
-    res.status(500).json({ msg: "Server error" });
+    sendError(res, 500, "system", "Something went wrong. Please try again.");
   }
 };

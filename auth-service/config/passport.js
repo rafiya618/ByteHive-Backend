@@ -1,7 +1,7 @@
 import passport from "passport";
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import { userModel } from "../models/userModel.js";
-import profileModel from "../models/profileModel.js";
+// import profileModel from "../models/profileModel.js"; // optional
 
 passport.use(
   new GoogleStrategy(
@@ -14,9 +14,7 @@ passport.use(
     async (req, accessToken, refreshToken, profile, done) => {
       try {
         const email = profile.emails?.[0]?.value;
-        if (!email) {
-          return done(new Error("No email found in Google profile"), null);
-        }
+        if (!email) return done(new Error("No email found in Google profile"), null);
 
         const mode = req.query.state;
         console.log("🔍 Mode received:", mode);
@@ -24,32 +22,26 @@ passport.use(
         let user = await userModel.findOne({ email });
 
         if (mode === "login") {
-          if (!user) {
-            return done(null, false, { message: "User not found. Please register first." });
-          }
-          if (user.googleId !== profile.id) {
-            return done(null, false, { message: "Google account mismatch. Please use the correct Google account." });
-          }
+          if (!user) return done(null, false, { message: "User not found. Please register first." });
+          if (user.googleId !== profile.id) return done(null, false, { message: "Google account mismatch. Please use the correct Google account." });
           return done(null, user);
         }
 
         if (mode === "register") {
           if (user) {
-            return done(null, false, { message: "User already exists. Please log in." });
+            // Already registered → log in automatically
+            return done(null, user, { message: "You are already registered. Logging you in..." });
           }
 
+          // Create new user
           user = await userModel.create({
             email,
             googleId: profile.id,
             onboardingStep: 2
           });
 
-          // await profileModel.create({
-          //   user: user._id,
-          //   name: user.username,
-          //   bio: '',
-          //   socials: {},
-          // });
+          // Optional profile creation
+          // await profileModel.create({ user: user._id, name: user.username, bio: '', socials: {} });
 
           return done(null, user);
         }

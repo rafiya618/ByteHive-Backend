@@ -6,7 +6,7 @@ import notificationModel from "../models/notificationModel.js";
 export const getNotifications = async (req, res) => {
   try {
     // { recieverId: req.params.userId }
-    console.log('notification backend')
+    // console.log('notification backend')
     const notifications = await notificationModel.find({ receiverId: req.params.userId })
       .sort({ createdAt: -1 });
     const unReadCount  = await notificationModel.countDocuments({receiverId: req.params.userId, status: "unread"})

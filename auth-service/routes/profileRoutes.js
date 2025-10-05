@@ -5,11 +5,12 @@ import {
   setupProfile,
   updateProfile
 } from '../controllers/profileController.js';
+import { verifyUser } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
-router.get('/:userId', getProfile);
-router.post("/setup/:userId", setupProfile)
-router.put('/:userId', upload.single('profileImage'), updateProfile);
+router.get('/:userId', verifyUser, getProfile);
+router.post("/setup/:userId", verifyUser, setupProfile)
+router.put('/:userId', verifyUser, upload.single('profileImage'), updateProfile);
 
 export default router;

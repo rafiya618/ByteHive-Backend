@@ -16,7 +16,7 @@ const router = express.Router();
 // Google OAuth Login
 router.get('/google', (req, res, next) => {
   const mode = req.query.mode;
-  console.log("entered in ", mode );
+  console.log("Entered mode:", mode);
   if (!mode || (mode !== "login" && mode !== "register")) {
     return res.status(400).send("Invalid mode. Use mode=login or mode=register.");
   }
@@ -34,22 +34,24 @@ router.get(
   '/google/callback',
   (req, res, next) => {
     passport.authenticate('google', { session: false }, (err, user, info) => {
-      if (err) {
-        return res.redirect(`${process.env.FRONTEND_URL}/google-auth?error=${encodeURIComponent("Authentication failed. Please try again.")}`);
-      }
+      // ✅ Handle internal Passport errors
+      if (err) return next(err);
 
+      // User not found or invalid
       if (!user) {
         return res.redirect(`${process.env.FRONTEND_URL}/google-auth?error=${encodeURIComponent(info?.message || "Authentication failed.")}`);
       }
 
+      // Pass user and optional message to GoogleLogin
       req.user = user;
+      req.authInfo = info;
       next();
     })(req, res, next);
   },
   GoogleLogin
 );
 
-// Routes
+// Other routes
 router.post('/login', Login);
 router.post('/forgot-password', forgotPassword);
 router.post('/verify-reset-otp', verifyResetOtp);

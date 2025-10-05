@@ -17,7 +17,8 @@ const { pub } = await createRedisClients();
 // ============================
 export const getProfile = async (req, res) => {
   try {
-    const profile = await Profile.findOne({ user: req.params.userId }).populate('user', 'name email');
+    const profile = await Profile.findOne({ user: req.params.userId }).populate('user', 'email');
+    console.log('profile', profile)
     if (!profile) return res.status(404).json({ success: false, message: 'Profile not found' });
     res.json(profile);
   } catch (err) {
@@ -32,27 +33,44 @@ export const setupProfile = async (req, res) => {
   try {
     const { userId } = req.params;
     const { name, username } = req.body;
-    
-    console.log('req.body in set up porfile', req.body)
-    console.log('req.body in set up porfile', req.params)
-
+    console.log('name', name, username)
     // ✅ Backend Validation
     const nameError = validateName(name);
-    if (nameError) return res.status(400).json({ success: false, message: nameError });
+    if (nameError) {
+      return res.status(400).json({
+        success: false,
+        field: "name",
+        message: nameError,
+      });
+    }
 
     const usernameError = validateUsername(username);
-    if (usernameError) return res.status(400).json({ success: false, message: usernameError });
+    if (usernameError) {
+      return res.status(400).json({
+        success: false,
+        field: "username",
+        message: usernameError,
+      });
+    }
 
     // Check if profile already exists
     const existingProfile = await Profile.findOne({ user: userId });
     if (existingProfile) {
-      return res.status(400).json({ success: false, message: "Profile already exists" });
+      return res.status(400).json({
+        success: false,
+        field: "username", // 👈 safest place to attach this
+        message: "Profile already exists",
+      });
     }
 
     // Check username uniqueness
     const existingUsername = await Profile.findOne({ username });
     if (existingUsername) {
-      return res.status(400).json({ success: false, message: "Username already taken" });
+      return res.status(400).json({
+        success: false,
+        field: "username",
+        message: "Username already taken",
+      });
     }
 
     // ✅ Create new profile
@@ -87,51 +105,63 @@ export const setupProfile = async (req, res) => {
     const notificationPayload = {
       receiverEmail: user.email,
       entityType: "security",
-      message: "You have successfully created account in ByteHive."
+      message: "You have successfully created account in ByteHive.",
     };
 
-    await pub.publish("notification:event", JSON.stringify({ notificationPayload }));
+    await pub.publish(
+      "notification:event",
+      JSON.stringify({ notificationPayload })
+    );
 
-    res.status(201).json({ success: true, message: "Profile created successfully", profile, token });
-
+    res.status(201).json({
+      success: true,
+      message: "Profile created successfully",
+      profile,
+      token,
+    });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ success: false, message: "Server error" });
+    res.status(500).json({
+      success: false,
+      field: null,
+      message: "Server error",
+    });
   }
 };
 
+
 // ============================
-// 🔹 Update Profile
+// 🔹 Update Profile 
 // ============================
 export const updateProfile = async (req, res) => {
   try {
     const updates = { ...req.body };
+    console.log('updates', updates)
 
     // ✅ Validate name if present
     if (updates.name) {
       const nameError = validateName(updates.name);
-      if (nameError) return res.status(400).json({ success: false, message: nameError });
+      if (nameError) return res.status(400).json({ success: false, field: "name", message: nameError });
     }
 
     // ✅ Validate username if present
     if (updates.username) {
       const usernameError = validateUsername(updates.username);
-      if (usernameError) return res.status(400).json({ success: false, message: usernameError });
+      if (usernameError) return res.status(400).json({ success: false, field: "username", message: usernameError });
 
-      // Check uniqueness excluding self
       const existingUsername = await Profile.findOne({
         username: updates.username,
         user: { $ne: req.params.userId },
       });
       if (existingUsername) {
-        return res.status(400).json({ success: false, message: "Username already taken" });
+        return res.status(400).json({ success: false, field: "username", message: "Username already taken" });
       }
     }
 
     // ✅ Validate bio if present
     if (updates.bio) {
       const bioError = validateBio(updates.bio);
-      if (bioError) return res.status(400).json({ success: false, message: bioError });
+      if (bioError) return res.status(400).json({ success: false, field: "bio", message: bioError });
     }
 
     // ✅ Handle profile image upload
@@ -149,7 +179,7 @@ export const updateProfile = async (req, res) => {
       updates.profileImage = result.secure_url;
     }
 
-    // ✅ Normalize & validate social links only if provided
+    // ✅ Normalize & validate social links
     const socialsProvided = Object.keys(updates).some((key) => key.startsWith("socialLinks["));
     if (socialsProvided) {
       updates.socialLinks = {
@@ -164,17 +194,16 @@ export const updateProfile = async (req, res) => {
       };
 
       const socialErrors = validateSocialLinks(updates.socialLinks);
-      if (socialErrors) {
-        return res.status(400).json({ success: false, message: socialErrors });
+      if (Object.keys(socialErrors).length > 0) {
+        return res.status(400).json({ success: false, field: "socialLinks", message: socialErrors });
       }
 
-      // Remove raw keys like socialLinks[Linkedin] from updates
       Object.keys(updates).forEach((key) => {
         if (key.startsWith("socialLinks[")) delete updates[key];
       });
     }
 
-    // ✅ Update profile (without auto-upsert!)
+    // ✅ Update profile
     const profile = await Profile.findOneAndUpdate(
       { user: req.params.userId },
       { $set: updates },
@@ -182,7 +211,7 @@ export const updateProfile = async (req, res) => {
     );
 
     if (!profile) {
-      return res.status(404).json({ success: false, message: "Profile not found" });
+      return res.status(404).json({ success: false, field: null, message: "Profile not found" });
     }
 
     res.json({ success: true, message: "Profile updated successfully", profile });
@@ -195,25 +224,27 @@ export const updateProfile = async (req, res) => {
       console.log('user in updatted profile', user)
 
       // 🔹 Publish unified event
-    await pub.publish(
-      "userCache:events",
-      JSON.stringify({
-        event: "userCache:updated",
-        payload: {
-          id: req.params.userId,
-          name: profile.name,
-          username: profile.username,
-          email: user.email,
-          profileImage: profile.profileImage,
-        },
-      })
-    );
+      await pub.publish(
+        "userCache:events",
+        JSON.stringify({
+          event: "userCache:updated",
+          payload: {
+            id: req.params.userId,
+            name: profile.name,
+            username: profile.username,
+            email: user.email,
+            profileImage: profile.profileImage,
+          },
+        })
+      );
       console.log("📢 Published userCache:updated for cache sync");
     }
 
   } catch (err) {
     console.error("Profile update error:", err);
-    res.status(500).json({ success: false, message: "Update failed" });
+    res.status(500).json({ success: false, field: null, message: "Update failed" });
   }
 };
+
+
 

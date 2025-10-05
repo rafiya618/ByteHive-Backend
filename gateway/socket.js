@@ -28,7 +28,7 @@ export const setupSocket = async (server) => {
     });
 
     socket.on("forward:event", ({type, data}) => {
-    console.log("📢 Broadcasting to clients:", type, data);
+    // console.log("📢 Broadcasting to clients:", type, data);
 
     const eventName = type.split(":")[0];
 
