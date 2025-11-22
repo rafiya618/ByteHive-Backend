@@ -137,42 +137,54 @@ export const deletePost = async (req, res) => {
   }
 };
 
-// SEARCH — better ranking, tags/categories filter, pagination
+// SEARCH — simple text-based search with tags and categories
 export const searchPosts = async (req, res) => {
   try {
     const q = String(req.query.q || "").trim();
     const tagsParam = String(req.query.tags || "").trim();
     const categoryParam = String(req.query.category || "").trim();
     const page = Math.max(parseInt(req.query.page || "1", 10), 1);
-    const limit = Math.min(parseInt(req.query.limit || "10", 10), 50); // safe max 50
+    const limit = Math.min(parseInt(req.query.limit || "10", 10), 50);
     const skip = (page - 1) * limit;
+
+    // If no search query, return empty results
+    if (!q && !tagsParam && !categoryParam) {
+      return res.json({
+        ok: true,
+        count: 0,
+        total: 0,
+        page,
+        totalPages: 0,
+        posts: []
+      });
+    }
 
     let query = {};
     const conditions = [];
 
-    // 🔍 Search text in title, description, category, tags
-    if (q) {
-      const terms = Array.from(
-        new Set(
-          q.split(/[\s,]+/)
-            .map((t) => t.trim())
-            .filter((t) => t.length >= 2)
-        )
-      );
+    // 🔍 Text search - allow even single character searches
+    if (q && q.length >= 1) {
+      const terms = q.split(/[\s,]+/)
+        .map(t => t.trim())
+        .filter(t => t.length >= 1)
+        .slice(0, 10); // Limit to 10 terms max
 
-      const textConditions = [];
-      for (const term of terms) {
-        const rx = new RegExp(term, "i");
-        textConditions.push(
-          { post_title: rx },
-          { small_description: rx },
-          { post_description: rx },
-          { category: rx },
-          { tags: rx }
-        );
-      }
-      if (textConditions.length > 0) {
-        conditions.push({ $or: textConditions });
+      if (terms.length > 0) {
+        // Create text search conditions for each term
+        const textConditions = terms.map(term => {
+          const regex = new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), "i");
+          return {
+            $or: [
+              { post_title: regex },
+              { small_description: regex },
+              { post_description: regex },
+              { tags: regex }
+            ]
+          };
+        });
+
+        // ALL terms must match (more restrictive)
+        conditions.push({ $and: textConditions });
       }
     }
 
@@ -180,40 +192,87 @@ export const searchPosts = async (req, res) => {
     if (tagsParam) {
       const requestedTags = tagsParam
         .split(",")
-        .map((tag) => tag.trim())
-        .filter((tag) => tag.length > 0);
+        .map(tag => tag.trim().toLowerCase())
+        .filter(tag => tag.length > 0);
 
       if (requestedTags.length > 0) {
-        conditions.push({ tags: { $in: requestedTags } });
+        conditions.push({ 
+          tags: { 
+            $in: requestedTags.map(tag => new RegExp(`^${tag}$`, "i"))
+          } 
+        });
       }
     }
 
     // 📂 Category filter
     if (categoryParam) {
-      conditions.push({ category: new RegExp(categoryParam, "i") });
+      conditions.push({ 
+        category: new RegExp(`^${categoryParam.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, "i")
+      });
     }
 
-    if (conditions.length > 0) {
-      query = conditions.length === 1 ? conditions[0] : { $and: conditions };
+    // Only proceed if we have actual search conditions
+    if (conditions.length === 0) {
+      return res.json({
+        ok: true,
+        count: 0,
+        total: 0,
+        page,
+        totalPages: 0,
+        posts: []
+      });
     }
 
-    console.log("MongoDB query:", JSON.stringify(query, null, 2));
+    query = conditions.length === 1 ? conditions[0] : { $and: conditions };
 
-    // ⭐ Ranking: weighted score (upvotes & views), then newest first
+    console.log("Search query:", JSON.stringify(query, null, 2));
+
+    // Simple aggregation for relevance scoring
     const posts = await Post.aggregate([
       { $match: query },
       {
         $addFields: {
-          score: {
+          relevanceScore: {
             $add: [
-              { $multiply: ["$upvotes", 2] },
-              { $multiply: ["$views", 0.5] },
-              { $divide: [{ $subtract: [new Date(), "$createdAt"] }, -1000 * 60 * 60 * 24] } // newer = higher
+              // Title matches get highest score
+              q ? {
+                $cond: [
+                  { $regexMatch: { input: "$post_title", regex: q, options: "i" } },
+                  100,
+                  0
+                ]
+              } : 0,
+              // Small description matches get medium score
+              q ? {
+                $cond: [
+                  { $regexMatch: { input: { $ifNull: ["$small_description", ""] }, regex: q, options: "i" } },
+                  50,
+                  0
+                ]
+              } : 0,
+              // Tag exact matches get good score
+              q ? {
+                $multiply: [
+                  { $size: { $filter: { 
+                    input: { $ifNull: ["$tags", []] }, 
+                    cond: { $regexMatch: { input: "$$this", regex: q, options: "i" } }
+                  }}},
+                  30
+                ]
+              } : 0,
+              // Content matches get lower score
+              q ? {
+                $cond: [
+                  { $regexMatch: { input: "$post_description", regex: q, options: "i" } },
+                  20,
+                  0
+                ]
+              } : 0
             ]
           }
         }
       },
-      { $sort: { score: -1, createdAt: -1 } },
+      { $sort: { relevanceScore: -1, createdAt: -1 } },
       { $skip: skip },
       { $limit: limit }
     ]);
@@ -226,8 +285,10 @@ export const searchPosts = async (req, res) => {
       total,
       page,
       totalPages: Math.ceil(total / limit),
+      searchQuery: q,
       posts
     });
+
   } catch (err) {
     console.error("Search posts error:", err);
     res.status(500).json({ ok: false, error: err.message });
@@ -240,6 +301,127 @@ export const getPostStatus = async (req, res) => {
     const doc = await Post.findById(req.params.id).select("status");
     if (!doc) return res.status(404).json({ ok: false, error: "Not found" });
     res.json({ ok: true, status: doc.status });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+};
+
+// LIKE POST
+export const likePost = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { user_id } = req.body;
+
+    if (!user_id) {
+      return res.status(400).json({ ok: false, error: "User ID required" });
+    }
+
+    const post = await Post.findById(id);
+    if (!post) {
+      return res.status(404).json({ ok: false, error: "Post not found" });
+    }
+
+    // Check if user already liked the post
+    const alreadyLiked = post.upvotes.includes(user_id);
+    const alreadyDisliked = post.downvotes.includes(user_id);
+
+    if (alreadyLiked) {
+      // Remove like
+      post.upvotes = post.upvotes.filter(id => id !== user_id);
+    } else {
+      // Add like
+      post.upvotes.push(user_id);
+
+      // Remove from dislikes if present
+      if (alreadyDisliked) {
+        post.downvotes = post.downvotes.filter(id => id !== user_id);
+      }
+    }
+
+    await post.save();
+
+    res.json({
+      ok: true,
+      message: alreadyLiked ? "Like removed" : "Post liked",
+      upvotes: post.upvotes.length,
+      downvotes: post.downvotes.length,
+      userLiked: !alreadyLiked,
+      userDisliked: false
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+};
+
+// DISLIKE POST
+export const dislikePost = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { user_id } = req.body;
+
+    if (!user_id) {
+      return res.status(400).json({ ok: false, error: "User ID required" });
+    }
+
+    const post = await Post.findById(id);
+    if (!post) {
+      return res.status(404).json({ ok: false, error: "Post not found" });
+    }
+
+    // Check if user already disliked the post
+    const alreadyDisliked = post.downvotes.includes(user_id);
+    const alreadyLiked = post.upvotes.includes(user_id);
+
+    if (alreadyDisliked) {
+      // Remove dislike
+      post.downvotes = post.downvotes.filter(id => id !== user_id);
+    } else {
+      // Add dislike
+      post.downvotes.push(user_id);
+
+      // Remove from likes if present
+      if (alreadyLiked) {
+        post.upvotes = post.upvotes.filter(id => id !== user_id);
+      }
+    }
+
+    await post.save();
+
+    res.json({
+      ok: true,
+      message: alreadyDisliked ? "Dislike removed" : "Post disliked",
+      upvotes: post.upvotes.length,
+      downvotes: post.downvotes.length,
+      userLiked: false,
+      userDisliked: !alreadyDisliked
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+};
+
+
+// GET POST VOTE STATUS
+export const getPostVoteStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { user_id } = req.query;
+
+    const post = await Post.findById(id).select('upvotes downvotes');
+    if (!post) {
+      return res.status(404).json({ ok: false, error: "Post not found" });
+    }
+
+    const userLiked = user_id ? post.upvotes.includes(user_id) : false;
+    const userDisliked = user_id ? post.downvotes.includes(user_id) : false;
+
+    res.json({
+      ok: true,
+      upvotes: post.upvotes.length,
+      downvotes: post.downvotes.length,
+      userLiked,
+      userDisliked
+    });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }

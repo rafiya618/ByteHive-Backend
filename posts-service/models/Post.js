@@ -24,12 +24,12 @@ const PostSchema = new mongoose.Schema(
     post_description: { type: String, required: true },
     category: { type: String, enum: ['blog', 'question'], required: true, index: true },
     tags: [{ type: String, index: true }],
-    upvotes: { type: Number, default: 0 },
-    downvotes: { type: Number, default: 0 },
+    upvotes: [{ type: String }], 
+    downvotes: [{ type: String }], 
     views: { type: Number, default: 0 },
     community: { type: String },
     comments: { type: Number, default: 0 }, // count only
-    user_id: { type: Number, required: true }, // from JWT in real app
+    user_id: { type: String, required: true }, // from JWT in real app
     date: { type: Date, default: Date.now },
     read_time: { type: Number }, // computed by worker
     thumbnail: { type: String }, // fallback set by worker

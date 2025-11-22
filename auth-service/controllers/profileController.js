@@ -17,6 +17,7 @@ const { pub } = await createRedisClients();
 // ============================
 export const getProfile = async (req, res) => {
   try {
+    console.log('req.params.userId', req.params.userId);
     const profile = await Profile.findOne({ user: req.params.userId }).populate('user', 'email');
     console.log('profile', profile)
     if (!profile) return res.status(404).json({ success: false, message: 'Profile not found' });

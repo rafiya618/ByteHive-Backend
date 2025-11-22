@@ -1,3 +1,4 @@
+// routes/eventRoutes.js
 import express from "express";
 import {
   createEvent,
@@ -5,7 +6,8 @@ import {
   getEventById,
   updateEvent,
   deleteEvent,
-  searchEvents
+  searchEvents,
+  syncEventToCalendar,
 } from "../controllers/eventController.js";
 
 const router = express.Router();
@@ -27,5 +29,8 @@ router.put("/:id", updateEvent);
 
 // Delete event
 router.delete("/:id", deleteEvent);
+
+// Sync event to Google Calendar (frontend should include x-google-refresh-token header)
+router.post("/:id/sync", syncEventToCalendar);  // 👈 NEW ROUTE
 
 export default router;

@@ -1,3 +1,4 @@
+// models/Event.js
 import mongoose from "mongoose";
 
 const eventSchema = new mongoose.Schema(
@@ -12,20 +13,15 @@ const eventSchema = new mongoose.Schema(
       type: String,
       required: true,
       trim: true,
-      maxlength: 250, // word/char limit
+      maxlength: 250,
     },
-    thumbnail: {
-      type: String, // URL after cloudinary upload
-    },
+    thumbnail: { type: String },
     category: {
       type: String,
       enum: ["hackathon", "conference", "meetup", "workshop", "webinar", "other"],
       required: true,
     },
-    tags: {
-      type: [String],
-      default: [],
-    },
+    tags: { type: [String], default: [] },
     registration_link: {
       type: String,
       validate: {
@@ -33,25 +29,12 @@ const eventSchema = new mongoose.Schema(
         message: "Registration link must be valid URL",
       },
     },
-    location: {
-      type: String,
-      required: true,
-      default: "Online",
-    },
-    event_date: {
-      type: Date,
-      required: true,
-    },
-    rules: {
-      type: String, // store HTML/rich text
-    },
-    status: {
-      type: String,
-      enum: ["draft", "ready"],
-      default: "draft",
-    },
+    location: { type: String, required: true, default: "Online" },
+    event_date: { type: Date, required: true },
+    rules: { type: String },
+    status: { type: String, enum: ["draft", "ready"], default: "draft" },
     media: {
-      inputs: [String], 
+      inputs: [String],
       assets: [
         {
           url: String,
@@ -60,6 +43,8 @@ const eventSchema = new mongoose.Schema(
         },
       ],
     },
+    googleEventId: { type: String, default: null }, // tracking Google event
+    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
   },
   { timestamps: true }
 );
