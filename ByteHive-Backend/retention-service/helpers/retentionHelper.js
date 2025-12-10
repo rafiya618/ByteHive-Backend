@@ -52,6 +52,20 @@ export const BADGE_DEFINITIONS = [
   }
 ];
 
+// ========== USER ID NORMALIZATION ==========
+/**
+ * Normalize user_id to consistent string format
+ * Handles ObjectId, string, or other formats to prevent type mismatch in MongoDB queries
+ */
+export const normalizeUserId = (userId) => {
+  if (!userId) return null;
+  // Handle ObjectId objects with toString method
+  if (typeof userId === 'object' && userId.toString) {
+    return userId.toString();
+  }
+  return String(userId);
+};
+
 // ========== DATE HELPERS ==========
 /**
  * Check if user has activity today
@@ -90,7 +104,7 @@ export const hadActivityYesterday = (lastActivityDate) => {
  */
 export const calculateLevel = (totalPosts, totalReads, totalComments, totalLikes = 0) => {
   const activityScore = (totalPosts * 3) + (totalReads * 1) + (totalComments * 2) + (totalLikes * 0.5);
-  
+
   if (activityScore >= 100) return 5;
   if (activityScore >= 60) return 4;
   if (activityScore >= 30) return 3;
@@ -151,10 +165,10 @@ export const checkAndAwardBadges = (streak) => {
 export const getNewlyEarnedBadges = (badgeDetails) => {
   return badgeDetails
     .filter((b) => b.earned_at && new Date(b.earned_at).getTime() > Date.now() - 5000)
-    .map((b) => ({ 
-      badge_id: b.badge_id, 
-      badge_name: b.badge_name, 
-      badge_icon: b.badge_icon 
+    .map((b) => ({
+      badge_id: b.badge_id,
+      badge_name: b.badge_name,
+      badge_icon: b.badge_icon
     }));
 };
 
@@ -163,11 +177,14 @@ export const getNewlyEarnedBadges = (badgeDetails) => {
  * Update behavior metrics and check for new badges
  */
 export const updateBehaviorMetrics = async (user_id, activity_type, Streak) => {
-  let streak = await Streak.findOne({ user_id });
+  const normalizedUserId = normalizeUserId(user_id);
+  console.log(`🔍 [Helper] updateBehaviorMetrics - Looking for user_id: ${normalizedUserId} (original: ${user_id}, type: ${typeof user_id})`);
+  let streak = await Streak.findOne({ user_id: normalizedUserId });
 
   if (!streak) {
+    console.log(`ℹ️ [Helper] No existing streak found in updateBehaviorMetrics. Creating new.`);
     streak = await Streak.create({
-      user_id,
+      user_id: normalizedUserId,
       current_level: 1,
       badges_earned: [],
       badge_details: [],
@@ -223,13 +240,16 @@ export const updateBehaviorMetrics = async (user_id, activity_type, Streak) => {
  * Update streak logic (consecutive day tracking)
  */
 export const updateStreakLogic = async (user_id, Streak) => {
-  let streak = await Streak.findOne({ user_id });
+  const normalizedUserId = normalizeUserId(user_id);
+  console.log(`🔍 [Helper] updateStreakLogic called for user: ${normalizedUserId} (original type: ${typeof user_id})`);
+  let streak = await Streak.findOne({ user_id: normalizedUserId });
 
   // First time user
   if (!streak) {
+    console.log(`ℹ️ [Helper] No existing streak found. Creating new streak record.`);
     streak = await Streak.create({
-      user_id,
-      current_streak: 1,
+      user_id: normalizedUserId,
+      current_streak: 1, // Start at 1 immediately
       longest_streak: 1,
       total_days_active: 1,
       last_activity_date: new Date(),
@@ -243,16 +263,21 @@ export const updateStreakLogic = async (user_id, Streak) => {
       total_comments: 0,
       total_likes: 0
     });
+    console.log(`✅ [Helper] New streak created. current_streak: 1`);
     return streak;
   }
 
+  console.log(`ℹ️ [Helper] Existing streak found. Current: ${streak.current_streak}, Last Active: ${streak.last_activity_date}`);
+
   // User already has activity today - don't update streak
   if (hasActivityToday(streak.last_activity_date)) {
+    console.log(`ℹ️ [Helper] User already active today. No streak increment.`);
     return streak;
   }
 
   // User had activity yesterday - increment streak
   if (hadActivityYesterday(streak.last_activity_date)) {
+    console.log(`ℹ️ [Helper] User active yesterday. Incrementing streak.`);
     streak.current_streak += 1;
     streak.last_activity_date = new Date();
     streak.total_days_active += 1;
@@ -262,8 +287,10 @@ export const updateStreakLogic = async (user_id, Streak) => {
     if (streak.current_streak > streak.longest_streak) {
       streak.longest_streak = streak.current_streak;
     }
+    console.log(`✅ [Helper] Streak incremented to: ${streak.current_streak}`);
   } else {
     // User missed a day - reset streak to 1
+    console.log(`⚠️ [Helper] User missed a day. Resetting streak to 1.`);
     streak.current_streak = 1;
     streak.last_activity_date = new Date();
     streak.streak_started_date = new Date();

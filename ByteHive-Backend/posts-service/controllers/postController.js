@@ -196,17 +196,17 @@ export const searchPosts = async (req, res) => {
         .filter(tag => tag.length > 0);
 
       if (requestedTags.length > 0) {
-        conditions.push({ 
-          tags: { 
+        conditions.push({
+          tags: {
             $in: requestedTags.map(tag => new RegExp(`^${tag}$`, "i"))
-          } 
+          }
         });
       }
     }
 
     // 📂 Category filter
     if (categoryParam) {
-      conditions.push({ 
+      conditions.push({
         category: new RegExp(`^${categoryParam.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, "i")
       });
     }
@@ -253,10 +253,14 @@ export const searchPosts = async (req, res) => {
               // Tag exact matches get good score
               q ? {
                 $multiply: [
-                  { $size: { $filter: { 
-                    input: { $ifNull: ["$tags", []] }, 
-                    cond: { $regexMatch: { input: "$$this", regex: q, options: "i" } }
-                  }}},
+                  {
+                    $size: {
+                      $filter: {
+                        input: { $ifNull: ["$tags", []] },
+                        cond: { $regexMatch: { input: "$$this", regex: q, options: "i" } }
+                      }
+                    }
+                  },
                   30
                 ]
               } : 0,
@@ -430,6 +434,17 @@ export const getPostVoteStatus = async (req, res) => {
       userLiked,
       userDisliked
     });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+};
+// INCREMENT VIEWS
+export const incrementView = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const post = await Post.findByIdAndUpdate(id, { $inc: { views: 1 } }, { new: true });
+    if (!post) return res.status(404).json({ ok: false, error: "Not found" });
+    res.json({ ok: true, views: post.views });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }

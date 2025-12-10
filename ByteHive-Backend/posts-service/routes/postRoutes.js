@@ -8,8 +8,8 @@ import {
   searchPosts,
   getPostStatus,
   likePost,
-  dislikePost,
-  getPostVoteStatus
+  dislikePost, getPostVoteStatus,
+  incrementView
 } from "../controllers/postController.js";
 
 const router = express.Router();
@@ -25,6 +25,7 @@ router.delete("/:id", deletePost);
 router.post("/:id/like", likePost);
 router.post("/:id/dislike", dislikePost);
 router.get("/:id/vote-status", getPostVoteStatus);
+router.post("/:id/view", incrementView);
 
 // Extras
 router.get("/search/query", searchPosts); // /api/posts/search/query?q=term

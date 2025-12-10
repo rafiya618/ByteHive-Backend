@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { jwtDecode } from 'jwt-decode';
 
-const API_URL = 'http://localhost:5007/api';
+const API_URL = 'http://127.0.0.1:5004/api';
 
 // Create axios instance
 const api = axios.create({
@@ -28,7 +28,7 @@ const getUserIdFromToken = () => {
   try {
     const token = getAuthToken();
     if (!token) return 'user123'; // Fallback
-    
+
     const decoded = jwtDecode(token);
     const userId = decoded?._id || decoded?.id || decoded?.user_id || decoded?.userId || decoded?.sub;
     return userId || 'user123';

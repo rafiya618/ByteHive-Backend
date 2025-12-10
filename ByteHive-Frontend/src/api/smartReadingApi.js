@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const SMART_READING_BASE_URL = 'http://localhost:5008/smart-reading';
+const SMART_READING_BASE_URL = 'http://127.0.0.1:5008/smart-reading';
 
 // Create axios instance with default config
 const smartReadingClient = axios.create({

@@ -2,9 +2,8 @@ import Streak from "../models/streakModel.js";
 import {
   BADGE_DEFINITIONS,
   updateStreakLogic,
-  updateBehaviorMetrics,
-  calculateLevel,
-  getNewlyEarnedBadges
+  updateBehaviorMetrics, getNewlyEarnedBadges,
+  normalizeUserId
 } from "../helpers/retentionHelper.js";
 
 // ========== STREAK CONTROLLERS ==========
@@ -12,10 +11,15 @@ import {
 export const recordActivity = async (req, res) => {
   try {
     const { user_id, activity_type, post_id, comment_id, activity_description } = req.body;
-    console.log('📝 Recording activity:', { user_id, activity_type, post_id, comment_id, activity_description });
+    console.log('📝 [RETENTION-SERVICE] Request received:', {
+      user_id,
+      activity_type,
+      post_id,
+      comment_id
+    });
 
     if (!user_id || !activity_type) {
-      console.error('❌ Missing user_id or activity_type');
+      console.error('❌ [RETENTION-SERVICE] Missing required fields:', { user_id, activity_type });
       return res.status(400).json({
         success: false,
         message: "user_id and activity_type are required"
@@ -24,18 +28,30 @@ export const recordActivity = async (req, res) => {
 
     const validActivityTypes = ["read", "post", "comment", "like"];
     if (!validActivityTypes.includes(activity_type)) {
-      console.error('❌ Invalid activity_type:', activity_type);
+      console.error('❌ [RETENTION-SERVICE] Invalid activity_type:', activity_type);
       return res.status(400).json({
         success: false,
         message: `Invalid activity_type. Must be one of: ${validActivityTypes.join(", ")}`
       });
     }
 
-    console.log('🔄 Updating streak logic...');
-    await updateStreakLogic(user_id, Streak);
+    console.log(`🔄 [RETENTION-SERVICE] Processing streak logic for user: ${user_id}`);
+    const updatedStreakDoc = await updateStreakLogic(user_id, Streak);
+    console.log('✅ [RETENTION-SERVICE] Streak logic updated. Current streak:', updatedStreakDoc.current_streak);
+
+    console.log(`🔄 [RETENTION-SERVICE] Updating behavior metrics for type: ${activity_type}`);
     const streak = await updateBehaviorMetrics(user_id, activity_type, Streak);
-    console.log('✅ Streak updated:', { current_streak: streak.current_streak, total_reads: streak.total_reads, total_posts: streak.total_posts, total_comments: streak.total_comments, total_likes: streak.total_likes });
+
+    console.log('✅ [RETENTION-SERVICE] Final State:', {
+      current_streak: streak.current_streak,
+      total_reads: streak.total_reads,
+      total_likes: streak.total_likes
+    });
+
     const newBadges = getNewlyEarnedBadges(streak.badge_details);
+    if (newBadges.length > 0) {
+      console.log('🏆 [RETENTION-SERVICE] New badges earned:', newBadges.map(b => b.badge_name));
+    }
 
     return res.status(200).json({
       ok: true,
@@ -56,7 +72,7 @@ export const recordActivity = async (req, res) => {
       }
     });
   } catch (err) {
-    console.error("Record activity error:", err.message);
+    console.error("❌ [RETENTION-SERVICE] Critical Error in recordActivity:", err);
     return res.status(500).json({ ok: false, error: err.message });
   }
 };
@@ -69,9 +85,12 @@ export const getUserStreak = async (req, res) => {
       return res.status(400).json({ success: false, message: "user_id is required" });
     }
 
-    let streak = await Streak.findOne({ user_id });
+    const normalizedUserId = normalizeUserId(user_id);
+    console.log(`🔍 [CONTROLLER] getUserStreak - Looking for user_id: ${normalizedUserId}`);
+    let streak = await Streak.findOne({ user_id: normalizedUserId });
     if (!streak) {
-      streak = await Streak.create({ user_id, current_level: 1, badges_earned: [] });
+      console.log(`ℹ️ [CONTROLLER] No streak found, creating new one`);
+      streak = await Streak.create({ user_id: normalizedUserId, current_level: 1, badges_earned: [] });
     }
 
     return res.status(200).json({
@@ -107,7 +126,8 @@ export const resetStreak = async (req, res) => {
       return res.status(400).json({ success: false, message: "user_id is required" });
     }
 
-    const streak = await Streak.findOne({ user_id });
+    const normalizedUserId = normalizeUserId(user_id);
+    const streak = await Streak.findOne({ user_id: normalizedUserId });
     if (!streak) {
       return res.status(404).json({ success: false, message: "Streak not found for this user" });
     }
@@ -166,7 +186,8 @@ export const getUserBadges = async (req, res) => {
       return res.status(400).json({ success: false, message: "user_id is required" });
     }
 
-    const streak = await Streak.findOne({ user_id });
+    const normalizedUserId = normalizeUserId(user_id);
+    const streak = await Streak.findOne({ user_id: normalizedUserId });
 
     if (!streak || streak.badges_earned.length === 0) {
       return res.status(200).json({
@@ -204,7 +225,8 @@ export const getUserLevel = async (req, res) => {
       return res.status(400).json({ success: false, message: "user_id is required" });
     }
 
-    const streak = await Streak.findOne({ user_id });
+    const normalizedUserId = normalizeUserId(user_id);
+    const streak = await Streak.findOne({ user_id: normalizedUserId });
 
     if (!streak) {
       return res.status(200).json({
@@ -256,7 +278,8 @@ export const getUserStats = async (req, res) => {
       return res.status(400).json({ success: false, message: "user_id is required" });
     }
 
-    const streak = await Streak.findOne({ user_id });
+    const normalizedUserId = normalizeUserId(user_id);
+    const streak = await Streak.findOne({ user_id: normalizedUserId });
 
     if (!streak) {
       return res.status(200).json({
@@ -338,7 +361,7 @@ export const getLeaderboard = async (req, res) => {
     console.error("Get leaderboard error:", err.message);
     return res.status(500).json({ ok: false, error: err.message });
   }
-  
+
 };
 
 

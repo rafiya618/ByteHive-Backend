@@ -1,12 +1,12 @@
 import { getAuthHeader } from './authHeader';
 
-const API_BASE_URL = 'http://localhost:5000/api';
+const API_BASE_URL = 'http://127.0.0.1:5000/api';
 
 // Base API request handler for posts
 const apiRequest = async (url, options = {}) => {
   console.log('Making API request to:', `${API_BASE_URL}${url}`);
   console.log('Request options:', options);
-  
+
   try {
     const response = await fetch(`${API_BASE_URL}${url}`, {
       ...options,
@@ -81,7 +81,7 @@ const getUserIdFromTokenLocal = () => {
     if (!payload) return null;
     // Common claim names: user_id, _id, id, sub, userId
     const id = payload.user_id ?? payload._id ?? payload.id ?? payload.sub ?? payload.userId;
-    console.log('Decoded user ID from token:', id);   
+    console.log('Decoded user ID from token:', id);
     return id !== undefined && id !== null ? String(id) : null;
   } catch (err) {
     return null;
@@ -104,7 +104,7 @@ export const postsApi = {
   createPost: async (postData) => {
     const userId = getUserIdFromTokenLocal();
     console.log('Creating post with user ID:', userId);
-    
+
     // Send data exactly as your Posts controller expects
     const postPayload = {
       post_title: postData.post_title,
@@ -117,9 +117,9 @@ export const postsApi = {
       thumbnail: postData.thumbnail || null,
       mediaInputs: postData.mediaInputs || []
     };
-    
+
     console.log('Final post payload:', postPayload);
-    
+
     return await authenticatedRequest('/posts', {
       method: 'POST',
       body: JSON.stringify(postPayload)
@@ -129,7 +129,7 @@ export const postsApi = {
   // Get Posts (Public)
   getPosts: async (filters = {}) => {
     const queryParams = new URLSearchParams();
-    
+
     if (filters.skip) queryParams.append('skip', filters.skip);
     if (filters.limit) queryParams.append('limit', filters.limit);
     if (filters.category) queryParams.append('category', filters.category);
@@ -137,14 +137,14 @@ export const postsApi = {
     if (filters.community_id) queryParams.append('community_id', filters.community_id);
     if (filters.status) queryParams.append('status', filters.status);
     if (filters.tags) queryParams.append('tags', filters.tags.join(','));
-    
+
     return await apiRequest(`/posts?${queryParams}`);
   },
 
   // Get Posts with Community Info (Public)
   getPostsWithCommunities: async (filters = {}) => {
     const queryParams = new URLSearchParams();
-    
+
     if (filters.skip) queryParams.append('skip', filters.skip);
     if (filters.limit) queryParams.append('limit', filters.limit);
     if (filters.category) queryParams.append('category', filters.category);
@@ -152,7 +152,7 @@ export const postsApi = {
     if (filters.community_id) queryParams.append('community_id', filters.community_id);
     if (filters.status) queryParams.append('status', filters.status);
     if (filters.tags) queryParams.append('tags', filters.tags.join(','));
-    
+
     const response = await apiRequest(`/posts?${queryParams}`);
     return response;
   },
@@ -163,7 +163,7 @@ export const postsApi = {
       console.log('Fetching post by ID:', postId);
       const response = await apiRequest(`/posts/${postId}`);
       console.log('Post API response:', response);
-      
+
       // Ensure the response has the expected structure
       if (response.ok && response.post) {
         // Transform the post data to ensure all required fields exist
@@ -179,10 +179,10 @@ export const postsApi = {
           views: response.post.views || 0,
           comments: response.post.comments || 0
         };
-        
+
         return { ...response, post };
       }
-      
+
       return response;
     } catch (error) {
       console.error('Error fetching post by ID:', error);
@@ -193,14 +193,14 @@ export const postsApi = {
   // Get Post with Community Details
   getPostWithCommunity: async (postId) => {
     const post = await apiRequest(`/posts/${postId}`);
-    
+
     // If the post has community_id but no community_name, fetch community details
     if (post.post && post.post.community_id && !post.post.community_name) {
       try {
         // Import communityApi dynamically to avoid circular imports
         const { communityApi } = await import('./communityApi');
         const communityResponse = await communityApi.getCommunityDetails(post.post.community_id);
-        
+
         if (communityResponse.community) {
           post.post.community_name = communityResponse.community.community_name;
         }
@@ -209,14 +209,14 @@ export const postsApi = {
         post.post.community_name = 'Unknown Community';
       }
     }
-    
+
     return post;
   },
 
   // Search Posts (Public) - Updated to allow single character searches
   searchPosts: async (searchParams = {}) => {
     const queryParams = new URLSearchParams();
-    
+
     // Clean and validate search query - now allow single characters
     if (searchParams.q) {
       const cleanQuery = searchParams.q.trim();
@@ -234,19 +234,19 @@ export const postsApi = {
         };
       }
     }
-    
+
     if (searchParams.tags) queryParams.append('tags', searchParams.tags);
     if (searchParams.category) queryParams.append('category', searchParams.category);
     if (searchParams.page) queryParams.append('page', searchParams.page);
     if (searchParams.limit) queryParams.append('limit', searchParams.limit);
-    
+
     console.log('Searching posts with params:', searchParams);
     console.log('Query string:', queryParams.toString());
-    
+
     try {
       const response = await apiRequest(`/posts/search/query?${queryParams}`);
       console.log('Search posts response:', response);
-      
+
       // Backend now handles all relevance scoring, just return the response
       return {
         ok: response.ok || true,
@@ -258,7 +258,7 @@ export const postsApi = {
       };
     } catch (error) {
       console.error('Search posts API error:', error);
-      
+
       // Return empty results instead of throwing error for better UX
       return {
         ok: false,
@@ -275,18 +275,18 @@ export const postsApi = {
   // Update Post (Protected)
   updatePost: async (postId, updateData) => {
     const userId = getUserIdFromTokenLocal();
-    
+
     // Convert userId if needed
     let processedUserId = userId;
     if (!isNaN(userId) && !isNaN(parseFloat(userId))) {
       processedUserId = Number(userId);
     }
-    
+
     const payload = {
       ...updateData,
       user_id: processedUserId
     };
-    
+
     return await authenticatedRequest(`/posts/${postId}`, {
       method: 'PUT',
       body: JSON.stringify(payload)
@@ -296,13 +296,13 @@ export const postsApi = {
   // Delete Post (Protected)
   deletePost: async (postId) => {
     const userId = getUserIdFromTokenLocal();
-    
+
     // Convert userId if needed
     let processedUserId = userId;
     if (!isNaN(userId) && !isNaN(parseFloat(userId))) {
       processedUserId = Number(userId);
     }
-    
+
     return await authenticatedRequest(`/posts/${postId}`, {
       method: 'DELETE',
       headers: {
@@ -320,7 +320,7 @@ export const postsApi = {
   // Like/Unlike Post (Protected)
   likePost: async (postId, userId) => {
     console.log('Liking post:', { postId, userId });
-    
+
     try {
       // If caller didn't provide a userId, attempt to extract it from the token
       let processedUserId = userId;
@@ -338,13 +338,13 @@ export const postsApi = {
       });
     } catch (error) {
       console.error('Like post API error:', error);
-      
+
       // Handle schema mismatch error
       if (error.message.includes('upvotes') && error.message.includes('must be an array')) {
         console.warn('Detected upvotes schema mismatch. Post may need data migration.');
         throw new Error('This post has outdated data format. Please contact support to fix this issue.');
       }
-      
+
       throw error;
     }
   },
@@ -352,7 +352,7 @@ export const postsApi = {
   // Dislike/Remove Dislike Post (Protected)
   dislikePost: async (postId, userId) => {
     console.log('Disliking post:', { postId, userId });
-    
+
     try {
       // If caller didn't provide a userId, attempt to extract it from the token
       let processedUserId = userId;
@@ -370,13 +370,13 @@ export const postsApi = {
       });
     } catch (error) {
       console.error('Dislike post API error:', error);
-      
+
       // Handle schema mismatch error
       if (error.message.includes('downvotes') && error.message.includes('must be an array')) {
         console.warn('Detected downvotes schema mismatch. Post may need data migration.');
         throw new Error('This post has outdated data format. Please contact support to fix this issue.');
       }
-      
+
       throw error;
     }
   },
@@ -393,13 +393,13 @@ export const postsApi = {
   getPostByIdWithVotes: async (postId, userId = null) => {
     try {
       console.log('Fetching post with votes:', { postId, userId });
-      
+
       // Get post details and vote status in parallel
       const [postResponse, voteResponse] = await Promise.all([
         postsApi.getPostById(postId),
         postsApi.getPostVoteStatus(postId, userId)
       ]);
-      
+
       if (postResponse.ok && voteResponse.ok) {
         // Merge post data with vote information
         const enhancedPost = {
@@ -409,14 +409,27 @@ export const postsApi = {
           userLiked: voteResponse.userLiked || false,
           userDisliked: voteResponse.userDisliked || false
         };
-        
+
         return { ...postResponse, post: enhancedPost };
       }
-      
+
       return postResponse;
     } catch (error) {
       console.error('Error fetching post with votes:', error);
       throw error;
+    }
+  },
+
+  // Increment Post View (Public)
+  incrementView: async (postId) => {
+    try {
+      return await apiRequest(`/posts/${postId}/view`, {
+        method: 'POST'
+      });
+    } catch (error) {
+      console.error('Error incrementing view:', error);
+      // Non-blocking error
+      return null;
     }
   },
 };

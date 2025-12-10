@@ -56,11 +56,11 @@ export default function BlogDetail() {
             data = resp.post || resp;
           } catch {
             // fallback to basic fetch
-            const res = await axios.get(`http://localhost:5000/api/posts/${postId}`);
+            const res = await axios.get(`http://127.0.0.1:5000/api/posts/${postId}`);
             data = res.data.post;
           }
         } else {
-          const res = await axios.get(`http://localhost:5000/api/posts/${postId}`);
+          const res = await axios.get(`http://127.0.0.1:5000/api/posts/${postId}`);
           data = res.data.post;
         }
 
@@ -87,6 +87,13 @@ export default function BlogDetail() {
             console.error("Failed to record view in history:", error);
             // Don't block the UI if history recording fails
           }
+        }
+
+        // Always increment view count regardless of auth status
+        try {
+          await postsApi.incrementView(postId);
+        } catch (error) {
+          console.error("Failed to increment view count:", error);
         }
       } catch (error) {
         setErr(error?.response?.data?.error || "Failed to load post");
@@ -307,7 +314,7 @@ export default function BlogDetail() {
 
   // Select which content to show
   let contentToRender = post.post_description;
-  
+
   if (readingMode === "simplify") {
     if (simplifiedContent) {
       contentToRender = simplifiedContent.simplifiedContent || post.post_description;
@@ -344,11 +351,10 @@ export default function BlogDetail() {
               <button
                 onClick={handleSimplifyClick}
                 disabled={loadingSimplification}
-                className={`flex items-center space-x-2 px-4 py-2 rounded-md font-lato text-sm font-medium transition-all disabled:opacity-50 ${
-                  readingMode === "simplify"
-                    ? "bg-medium-slate-blue text-white shadow-lg shadow-medium-slate-blue/30"
-                    : "bg-rich-black-light text-periwinkle hover:bg-periwinkle-light border border-navbar-border"
-                }`}
+                className={`flex items-center space-x-2 px-4 py-2 rounded-md font-lato text-sm font-medium transition-all disabled:opacity-50 ${readingMode === "simplify"
+                  ? "bg-medium-slate-blue text-white shadow-lg shadow-medium-slate-blue/30"
+                  : "bg-rich-black-light text-periwinkle hover:bg-periwinkle-light border border-navbar-border"
+                  }`}
               >
                 <span className="material-icons text-lg">
                   {loadingSimplification ? "hourglass_top" : "auto_fix_high"}
@@ -357,11 +363,10 @@ export default function BlogDetail() {
               </button>
               <button
                 onClick={() => setReadingMode("original")}
-                className={`flex items-center space-x-2 px-4 py-2 rounded-md font-lato text-sm font-medium transition-all ${
-                  readingMode === "original"
-                    ? "bg-medium-slate-blue text-white shadow-lg shadow-medium-slate-blue/30"
-                    : "bg-rich-black-light text-periwinkle hover:bg-periwinkle-light border border-navbar-border"
-                }`}
+                className={`flex items-center space-x-2 px-4 py-2 rounded-md font-lato text-sm font-medium transition-all ${readingMode === "original"
+                  ? "bg-medium-slate-blue text-white shadow-lg shadow-medium-slate-blue/30"
+                  : "bg-rich-black-light text-periwinkle hover:bg-periwinkle-light border border-navbar-border"
+                  }`}
               >
                 <span className="material-icons text-lg">description</span>
                 <span>Original</span>
@@ -459,9 +464,8 @@ export default function BlogDetail() {
               {/* Upvote */}
               <button
                 onClick={toggleUpvote}
-                className={`flex items-center space-x-2 transition-colors ${
-                  isUpvoted ? "text-green-400" : "text-periwinkle hover:text-white"
-                }`}
+                className={`flex items-center space-x-2 transition-colors ${isUpvoted ? "text-green-400" : "text-periwinkle hover:text-white"
+                  }`}
               >
                 <span className="material-icons text-lg">arrow_upward</span>
                 <span className="font-lato font-medium">{upvotes}</span>
@@ -470,9 +474,8 @@ export default function BlogDetail() {
               {/* Downvote */}
               <button
                 onClick={toggleDownvote}
-                className={`flex items-center space-x-2 transition-colors ${
-                  isDownvoted ? "text-red-400" : "text-periwinkle hover:text-white"
-                }`}
+                className={`flex items-center space-x-2 transition-colors ${isDownvoted ? "text-red-400" : "text-periwinkle hover:text-white"
+                  }`}
               >
                 <span className="material-icons text-lg">arrow_downward</span>
                 <span className="font-lato font-medium">{downvotes}</span>
@@ -509,18 +512,16 @@ export default function BlogDetail() {
                       <>
                         <button
                           onClick={() => handleSavePost("Saved")}
-                          className={`w-full text-left px-4 py-2 hover:bg-gray-700 transition-colors flex items-center gap-2 ${
-                            savedCategory === "Saved" ? "text-periwinkle" : "text-white"
-                          }`}
+                          className={`w-full text-left px-4 py-2 hover:bg-gray-700 transition-colors flex items-center gap-2 ${savedCategory === "Saved" ? "text-periwinkle" : "text-white"
+                            }`}
                         >
                           <span className="material-icons text-sm">check</span>
                           Saved
                         </button>
                         <button
                           onClick={() => handleSavePost("Watch Later")}
-                          className={`w-full text-left px-4 py-2 hover:bg-gray-700 transition-colors flex items-center gap-2 ${
-                            savedCategory === "Watch Later" ? "text-periwinkle" : "text-white"
-                          }`}
+                          className={`w-full text-left px-4 py-2 hover:bg-gray-700 transition-colors flex items-center gap-2 ${savedCategory === "Watch Later" ? "text-periwinkle" : "text-white"
+                            }`}
                         >
                           <span className="material-icons text-sm">
                             {savedCategory === "Watch Later" ? "check" : ""}

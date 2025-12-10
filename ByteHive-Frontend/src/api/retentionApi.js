@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { jwtDecode } from 'jwt-decode';
 
-const API_URL = 'http://localhost:5005/api';
+const API_URL = 'http://127.0.0.1:5005/api';
 
 // Create axios instance
 const api = axios.create({
@@ -30,7 +30,7 @@ const getUserIdFromToken = () => {
   try {
     const token = getAuthToken();
     if (!token) return null;
-    
+
     const decoded = jwtDecode(token);
     console.log('🔓 Decoded JWT token:', decoded);
     // Check various possible userId field names
@@ -57,12 +57,12 @@ export const recordActivity = async (activityType, postId = null, commentId = nu
   try {
     const userId = getUserIdFromToken();
     console.log('🎬 Recording activity:', { activityType, userId, postId, commentId, description });
-    
+
     if (!userId) {
       console.warn('❌ No user ID found in token, cannot record activity');
       return null;
     }
-    
+
     const payload = {
       user_id: userId,
       activity_type: activityType,
@@ -70,7 +70,7 @@ export const recordActivity = async (activityType, postId = null, commentId = nu
       comment_id: commentId,
       activity_description: description
     };
-    
+
     console.log('📤 Sending activity payload:', payload);
     const response = await api.post('/retention/activity/record', payload);
     console.log('✅ Activity recorded successfully:', response.data);
@@ -91,7 +91,7 @@ export const getUserStreak = async (userId = null) => {
   try {
     const uid = userId || getUserIdFromToken();
     console.log('🔥 Fetching streak for user ID:', uid);
-    
+
     if (!uid) {
       console.warn('❌ No user ID found in token');
       return {
@@ -107,15 +107,15 @@ export const getUserStreak = async (userId = null) => {
         }
       };
     }
-    
+
     console.log('📡 Making API request to:', `/retention/streak/${uid}`);
     const response = await api.get(`/retention/streak/${uid}`);
     console.log('✅ Streak API response received:', response.data);
-    
+
     // Extract streak data from response structure
     const streakData = response.data?.streak || response.data;
     console.log('📊 Extracted streak data:', streakData);
-    
+
     const result = {
       current_streak: streakData?.current_streak ?? 0,
       longest_streak: streakData?.longest_streak ?? 0,
@@ -230,3 +230,16 @@ export const resetStreak = async (userId = null) => {
     throw error.response?.data || error.message;
   }
 };
+// Export object for hooks that use named import { retentionApi }
+export const retentionApi = {
+  recordActivity,
+  getUserStreak,
+  getUserBadges,
+  getAllBadges,
+  getUserLevel,
+  getUserStats,
+  getLeaderboard,
+  resetStreak
+};
+
+export default retentionApi;
