@@ -17,6 +17,7 @@
   "description": "",
   "dependencies": {
     "bullmq": "^5.58.0",
+    "bytehive": "file:..",
     "cloudinary": "^1.41.3",
     "cors": "^2.8.5",
     "dotenv": "^17.2.1",
