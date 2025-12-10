@@ -1,0 +1,85 @@
+@import "tailwindcss";
+:root {
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  --rich-black: #0C0C16;
+  --rich-black-light: #161625;
+  --dark-navy-purple: #171626;
+  --faint-greyish-overlay: #FFFFFF33;
+  --dark-indigo: #201F31;
+  --navbar-bg: #11101E;
+  --periwinkle: #B0BAFF;
+  --periwinkle-light: rgba(176, 186, 255, 0.2);
+  --columbia-blue: #C9E8FF;
+  --celadon: #B9F0D7;
+  --medium-slate-blue: #6866FF;
+  --medium-slate-blue-dark: #5755D6;
+  --periwinkle-dark: #9a98e0;
+  --celadon-dark: #a0d8c0;
+  --gray-700: #374151;
+  --gray-800: #1f2937;
+  --navbar-border: rgba(176, 186, 255, 0.1);
+  --pinkish: #D9467C;
+  --pinkish-dark: #C0396B;
+  --card-button-bg: #2A2A3E;
+  --card-button-hover-bg: #383850;
+}
+
+/* Custom radial gradient utility for background */
+.bg-gradient-radial-custom {
+  background: radial-gradient(110% 90% at 0% 0%, #22213b 60%, #18162D 100%);
+}
+
+
+.bg-rich-black {
+  background: #0C0C16;
+}
+.font-fenix {
+  font-family: 'Fenix', serif;
+}
+.border-periwinkle-light{
+  color: var(--periwinkle-light); 
+}
+/* index.css additions */
+.text-periwinkle { color: var(--periwinkle); }   
+.text-celadon-dark { color: var(--celadon-dark); }            /* you were using this class but it wasn't defined */
+.bg-chip { background-color: #374053; }                   /* matches the pill bg */
+.icon-periwinkle { color: #B0BAFF !important; }           /* force Material Icons color */
+.text-desc { color: #FFFFFFB2; }                          /* description color */
+
+.bg-navbar-bg { background-color: var(--navbar-bg); }
+.bg-dark-navy-purple { background-color: var(--dark-navy-purple); }
+.bg-dark-indigo {
+  background-color: var(--dark-indigo);
+  transition: background-color 0.3s ease;
+}
+
+/* .bg-dark-indigo:hover {
+  background-color: color-mix(in srgb, var(--dark-indigo) 95%, white);
+} */
+.border-navbar-border { border-color: var(--navbar-border);}
+.border-rich-black { border-color: var(--rich-black);}
+.border-dark-indigo { border-color: var(--dark-indigo);}
+.border-faint-greyish-overlay { border-color: var(--faint-greyish-overlay);}
+.bg-rich-black-light { background-color: var(--rich-black-light);}
+.text-columbia-blue { color: var(--columbia-blue);}
+.text-pinkish { color: var(--pinkish);}
+.bg-medium-slate-blue { background-color: var(--medium-slate-blue);}
+.hover\:bg-white\/10:hover { background-color: rgba(255,255,255,0.10);}
+.hover\:border-periwinkle:hover { border-color: var(--periwinkle);}
+.font-fenix { font-family: 'Fenix', serif; }
+
+/* Custom scrollbar */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #4f46e5; /* Tailwind indigo-600 */
+  border-radius: 9999px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}

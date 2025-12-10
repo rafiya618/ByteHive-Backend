@@ -1,0 +1,110 @@
+/* Reset */
+/* * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  } */
+  
+  body {
+    font-family: "Poppins", sans-serif;
+  }
+  
+  /* Navbar Styles */
+  .navbar {
+    background: #222;
+    padding: 10px 30px;  /* Less height */
+    width: 100%;
+    position: fixed;
+    height: 90px;
+    top: 0;
+    left: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  
+  /* Navbar Container */
+  .nav-container {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    height: 90px;
+    /* max-width: 1200px; */
+    margin: 0 auto;
+  }
+  
+  /* Logo */
+  .logo {
+    font-size: 22px;
+    font-weight: bold;
+    color: white;
+    margin-right: 20px;
+    margin-top: 40px;
+  }
+  
+  /* Navigation Links */
+  .nav-links {
+    list-style: none;
+    display: flex;
+    gap: 20px;
+    margin-left: 600px;
+  }
+  
+  .nav-links li {
+    display: inline;
+  }
+  
+  .nav-links a {
+    text-decoration: none;
+    color: white;
+    font-size: 16px;
+    transition: 0.3s ease;
+    padding: 5px 10px;
+    border-radius: 5px;
+  }
+  
+  /* Hover Effect */
+  .nav-links a:hover {
+    background: rgba(255, 255, 255, 0.2);
+  }
+  
+  /* Menu Icon (For Mobile) */
+  .menu-icon {
+    display: none; /* Hidden on larger screens */
+    cursor: pointer;
+    background: white;
+    border-radius: 5px;
+    padding: 5px;
+  }
+  
+  /* Responsive for Mobile */
+  @media (max-width: 768px) {
+    .nav-links {
+      display: none; /* Hide links on mobile */
+      flex-direction: column;
+      background: #222;
+      position: absolute;
+      top: 50px;
+      right: 20px;
+      padding: 10px;
+      border-radius: 5px;
+    }
+  
+    .menu-icon {
+      display: block; /* Show menu icon */
+    }
+  
+    .nav-links.show {
+      display: flex; /* Show links when menu is clicked */
+    }
+  }
+  
+  .nav-avatar {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    object-fit: cover;
+    margin-left: 53px;
+    margin-bottom: 17px;
+  }

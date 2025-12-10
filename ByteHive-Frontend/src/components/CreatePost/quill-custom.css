@@ -1,0 +1,36 @@
+/* Remove default Quill borders */
+.ql-container.ql-snow,
+.ql-toolbar.ql-snow {
+  border: none !important;
+  background-color: var(--navbar-bg);
+  color: #fff;
+}
+
+/* Toolbar buttons */
+.ql-toolbar button svg {
+  stroke: var(--periwinkle);
+}
+.ql-toolbar button:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+/* Editor text */
+.ql-editor {
+  color: #fff;
+  min-height: 200px;
+}
+
+/* Placeholder */
+.ql-editor.ql-blank::before {
+  color: var(--columbia-blue);
+  opacity: 0.6;
+}
+
+/* Code block styling */
+.ql-syntax {
+  background-color: var(--rich-black-light) !important;
+  color: var(--columbia-blue) !important;
+  padding: 0.75rem;
+  border-radius: 0.375rem;
+  font-family: monospace;
+}

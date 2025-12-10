@@ -1,0 +1,20 @@
+:root {
+  --rich-black: #0C0C16;
+  --rich-black-light: #161625;
+  --navbar-bg: #11101E;
+  --periwinkle: #B0BAFF;
+  --periwinkle-light: rgba(176, 186, 255, 0.2);
+  --columbia-blue: #C9E8FF;
+  --celadon: #B9F0D7;
+  --medium-slate-blue: #6866FF;
+  --medium-slate-blue-dark: #5755D6;
+  --periwinkle-dark: #9a98e0;
+  --celadon-dark: #a0d8c0;
+  --gray-700: #374151;
+  --gray-800: #1f2937;
+  --navbar-border: rgba(176, 186, 255, 0.1);
+  --pinkish: #D9467C;
+  --pinkish-dark: #C0396B;
+  --card-button-bg: #2A2A3E;
+  --card-button-hover-bg: #383850;
+}
