@@ -323,35 +323,39 @@ export const likePost = async (req, res) => {
     // Normalize user_id to string for consistency
     const normalizedUserId = String(user_id);
 
-    const post = await Post.findById(id);
+    // Check current state to determine toggle action
+    const post = await Post.findById(id).select('upvotes downvotes');
     if (!post) {
       return res.status(404).json({ ok: false, error: "Post not found" });
     }
 
-    // Check if user already liked the post
     const alreadyLiked = post.upvotes.includes(normalizedUserId);
     const alreadyDisliked = post.downvotes.includes(normalizedUserId);
 
+    // Use atomic operations to prevent race conditions
+    let update;
     if (alreadyLiked) {
-      // Remove like
-      post.upvotes = post.upvotes.filter(id => id !== normalizedUserId);
+      // Remove like atomically
+      update = {
+        $pull: { upvotes: normalizedUserId }
+      };
     } else {
-      // Add like
-      post.upvotes.push(normalizedUserId);
-
-      // Remove from dislikes if present
-      if (alreadyDisliked) {
-        post.downvotes = post.downvotes.filter(id => id !== normalizedUserId);
-      }
+      // Add like atomically (using $addToSet prevents duplicates even with concurrent requests)
+      // Also remove from dislikes if present
+      update = {
+        $addToSet: { upvotes: normalizedUserId },
+        $pull: { downvotes: normalizedUserId }
+      };
     }
 
-    await post.save();
+    // Apply atomic update and get updated document
+    const updatedPost = await Post.findByIdAndUpdate(id, update, { new: true }).select('upvotes downvotes');
 
     res.json({
       ok: true,
       message: alreadyLiked ? "Like removed" : "Post liked",
-      upvotes: post.upvotes.length,
-      downvotes: post.downvotes.length,
+      upvotes: updatedPost.upvotes.length,
+      downvotes: updatedPost.downvotes.length,
       userLiked: !alreadyLiked,
       userDisliked: false
     });
@@ -373,35 +377,39 @@ export const dislikePost = async (req, res) => {
     // Normalize user_id to string for consistency
     const normalizedUserId = String(user_id);
 
-    const post = await Post.findById(id);
+    // Check current state to determine toggle action
+    const post = await Post.findById(id).select('upvotes downvotes');
     if (!post) {
       return res.status(404).json({ ok: false, error: "Post not found" });
     }
 
-    // Check if user already disliked the post
     const alreadyDisliked = post.downvotes.includes(normalizedUserId);
     const alreadyLiked = post.upvotes.includes(normalizedUserId);
 
+    // Use atomic operations to prevent race conditions
+    let update;
     if (alreadyDisliked) {
-      // Remove dislike
-      post.downvotes = post.downvotes.filter(id => id !== normalizedUserId);
+      // Remove dislike atomically
+      update = {
+        $pull: { downvotes: normalizedUserId }
+      };
     } else {
-      // Add dislike
-      post.downvotes.push(normalizedUserId);
-
-      // Remove from likes if present
-      if (alreadyLiked) {
-        post.upvotes = post.upvotes.filter(id => id !== normalizedUserId);
-      }
+      // Add dislike atomically (using $addToSet prevents duplicates even with concurrent requests)
+      // Also remove from likes if present
+      update = {
+        $addToSet: { downvotes: normalizedUserId },
+        $pull: { upvotes: normalizedUserId }
+      };
     }
 
-    await post.save();
+    // Apply atomic update and get updated document
+    const updatedPost = await Post.findByIdAndUpdate(id, update, { new: true }).select('upvotes downvotes');
 
     res.json({
       ok: true,
       message: alreadyDisliked ? "Dislike removed" : "Post disliked",
-      upvotes: post.upvotes.length,
-      downvotes: post.downvotes.length,
+      upvotes: updatedPost.upvotes.length,
+      downvotes: updatedPost.downvotes.length,
       userLiked: false,
       userDisliked: !alreadyDisliked
     });

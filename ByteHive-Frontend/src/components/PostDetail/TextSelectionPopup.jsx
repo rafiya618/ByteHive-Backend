@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { getMeaning, searchBlogs } from "../../api/smartReadingApi";
 import toast from "react-hot-toast";
 
@@ -209,12 +209,6 @@ const TextSelectionPopup = ({ position, selectedText, onClose }) => {
                     )}
                   </div>
 
-                  <div className="pt-4 border-t border-navbar-border">
-                    <button className="w-full bg-medium-slate-blue text-white py-2 px-4 rounded-lg hover:bg-medium-slate-blue-dark transition-colors flex items-center justify-center space-x-2">
-                      <span className="material-icons text-lg">volume_up</span>
-                      <span>Pronounce</span>
-                    </button>
-                  </div>
                 </>
               ) : (
                 <div className="text-center py-8">

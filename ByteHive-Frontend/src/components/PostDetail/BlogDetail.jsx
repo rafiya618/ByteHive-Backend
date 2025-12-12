@@ -31,6 +31,7 @@ export default function BlogDetail() {
   const [downvotes, setDownvotes] = useState(0);
   const [isUpvoted, setIsUpvoted] = useState(false);
   const [isDownvoted, setIsDownvoted] = useState(false);
+  const [isVoting, setIsVoting] = useState(false); // Prevent concurrent vote requests
   const [simplifiedContent, setSimplifiedContent] = useState(null);
   const [loadingSimplification, setLoadingSimplification] = useState(false);
   const [simplificationLevel, setSimplificationLevel] = useState("detailed");
@@ -185,6 +186,10 @@ export default function BlogDetail() {
       return;
     }
 
+    // Prevent concurrent requests
+    if (isVoting) return;
+
+    setIsVoting(true);
     // optimistic update
     const previous = { upvotes, downvotes, isUpvoted, isDownvoted };
     if (isUpvoted) {
@@ -210,11 +215,14 @@ export default function BlogDetail() {
       if (res && typeof res.userLiked === 'boolean') setIsUpvoted(res.userLiked);
       if (res && typeof res.userDisliked === 'boolean') setIsDownvoted(res.userDisliked);
 
-      // Record like activity for streak
-      try {
-        await recordActivity('like', postId, null, 'Liked a post');
-      } catch (err) {
-        console.warn('Failed to record like activity:', err);
+      // Record like activity for streak ONLY if we actually added a like (not removed it)
+      // Check if user was NOT previously upvoted
+      if (!previous.isUpvoted && res && typeof res.userLiked === 'boolean' && res.userLiked) {
+        try {
+          await recordActivity('like', postId, null, 'Liked a post');
+        } catch (err) {
+          console.warn('Failed to record like activity:', err);
+        }
       }
     } catch (error) {
       console.error('Like API failed:', error);
@@ -223,6 +231,8 @@ export default function BlogDetail() {
       setDownvotes(previous.downvotes);
       setIsUpvoted(previous.isUpvoted);
       setIsDownvoted(previous.isDownvoted);
+    } finally {
+      setIsVoting(false);
     }
   };
 
@@ -232,6 +242,10 @@ export default function BlogDetail() {
       return;
     }
 
+    // Prevent concurrent requests
+    if (isVoting) return;
+
+    setIsVoting(true);
     const previous = { upvotes, downvotes, isUpvoted, isDownvoted };
     if (isDownvoted) {
       setDownvotes((v) => v - 1);
@@ -266,6 +280,8 @@ export default function BlogDetail() {
       setDownvotes(previous.downvotes);
       setIsUpvoted(previous.isUpvoted);
       setIsDownvoted(previous.isDownvoted);
+    } finally {
+      setIsVoting(false);
     }
   };
 

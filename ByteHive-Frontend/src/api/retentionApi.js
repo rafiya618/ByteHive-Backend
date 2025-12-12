@@ -99,12 +99,18 @@ export const getUserStreak = async (userId = null) => {
         longest_streak: 0,
         current_level: 1,
         total_days_active: 0,
+        total_posts: 0,
+        total_reads: 0,
+        total_comments: 0,
+        total_likes: 0,
         activity_metrics: {
           total_posts: 0,
           total_reads: 0,
           total_comments: 0,
           total_likes: 0
-        }
+        },
+        badges_earned: [],
+        badge_details: []
       };
     }
 
@@ -121,6 +127,12 @@ export const getUserStreak = async (userId = null) => {
       longest_streak: streakData?.longest_streak ?? 0,
       current_level: streakData?.current_level ?? 1,
       total_days_active: streakData?.total_days_active ?? 0,
+      // Expose metrics at root level for StreakDropdown compatibility
+      total_posts: streakData?.total_posts ?? 0,
+      total_reads: streakData?.total_reads ?? 0,
+      total_comments: streakData?.total_comments ?? 0,
+      total_likes: streakData?.total_likes ?? 0,
+      // Also keep activity_metrics for backwards compatibility
       activity_metrics: {
         total_posts: streakData?.total_posts ?? 0,
         total_reads: streakData?.total_reads ?? 0,
@@ -145,12 +157,18 @@ export const getUserStreak = async (userId = null) => {
       longest_streak: 0,
       current_level: 1,
       total_days_active: 0,
+      total_posts: 0,
+      total_reads: 0,
+      total_comments: 0,
+      total_likes: 0,
       activity_metrics: {
         total_posts: 0,
         total_reads: 0,
         total_comments: 0,
         total_likes: 0
-      }
+      },
+      badges_earned: [],
+      badge_details: []
     };
     console.log('⚠️ Returning default data:', defaultData);
     return defaultData;
