@@ -34,7 +34,7 @@ export default function BlogDetail() {
   const [isVoting, setIsVoting] = useState(false); // Prevent concurrent vote requests
   const [simplifiedContent, setSimplifiedContent] = useState(null);
   const [loadingSimplification, setLoadingSimplification] = useState(false);
-  const [simplificationLevel, setSimplificationLevel] = useState("detailed");
+  const [simplificationLevel] = useState("detailed");
   const contentRef = useRef(null);
   // Helper to normalize upvote/downvote values (arrays or numbers) to a numeric count
   const toCount = (v) => {
@@ -46,6 +46,31 @@ export default function BlogDetail() {
 
   useEffect(() => {
     const fetchPost = async () => {
+      const cacheKey = `post_${postId}`;
+      const cachedData = localStorage.getItem(cacheKey);
+      
+      if (cachedData) {
+        try {
+          const { data, timestamp } = JSON.parse(cachedData);
+          const cacheAge = Date.now() - timestamp;
+          const cacheExpiry = 30 * 60 * 1000; // 30 minutes in milliseconds
+          
+          if (cacheAge < cacheExpiry) {
+            setPost(data);
+            setUpvotes(toCount(data.upvotes));
+            setDownvotes(toCount(data.downvotes));
+            if (data.userLiked !== undefined) setIsUpvoted(Boolean(data.userLiked));
+            if (data.userDisliked !== undefined) setIsDownvoted(Boolean(data.userDisliked));
+            setLoading(false);
+            return;
+          } else {
+            localStorage.removeItem(cacheKey);
+          }
+        } catch {
+          localStorage.removeItem(cacheKey);
+        }
+      }
+
       setLoading(true);
       try {
         // If user is logged in, fetch post with vote status for current user
@@ -72,6 +97,13 @@ export default function BlogDetail() {
         // Set vote flags if provided
         if (data.userLiked !== undefined) setIsUpvoted(Boolean(data.userLiked));
         if (data.userDisliked !== undefined) setIsDownvoted(Boolean(data.userDisliked));
+
+        // Cache the result
+        const cacheData = {
+          data: data,
+          timestamp: Date.now(),
+        };
+        localStorage.setItem(cacheKey, JSON.stringify(cacheData));
 
         // Record activity for reading this post
         if (auth?.token) {
@@ -367,9 +399,10 @@ export default function BlogDetail() {
               <button
                 onClick={handleSimplifyClick}
                 disabled={loadingSimplification}
-                className={`flex items-center space-x-2 px-4 py-2 rounded-md font-lato text-sm font-medium transition-all disabled:opacity-50 ${readingMode === "simplify"
-                  ? "bg-medium-slate-blue text-white shadow-lg shadow-medium-slate-blue/30"
-                  : "bg-rich-black-light text-periwinkle hover:bg-periwinkle-light border border-navbar-border"
+                className={`flex items-center space-x-2 px-4 py-2 rounded-md font-lato text-sm font-medium transition-all disabled:opacity-50 ${
+                  readingMode === "simplify"
+                    ? "bg-linear-to-r from-purple-600 to-medium-slate-blue text-white shadow-lg shadow-purple-500/30 border border-purple-400"
+                    : "bg-rich-black-light text-periwinkle hover:bg-periwinkle-light border border-navbar-border hover:border-periwinkle"
                   }`}
               >
                 <span className="material-icons text-lg">
@@ -379,9 +412,10 @@ export default function BlogDetail() {
               </button>
               <button
                 onClick={() => setReadingMode("original")}
-                className={`flex items-center space-x-2 px-4 py-2 rounded-md font-lato text-sm font-medium transition-all ${readingMode === "original"
-                  ? "bg-medium-slate-blue text-white shadow-lg shadow-medium-slate-blue/30"
-                  : "bg-rich-black-light text-periwinkle hover:bg-periwinkle-light border border-navbar-border"
+                className={`flex items-center space-x-2 px-4 py-2 rounded-md font-lato text-sm font-medium transition-all ${
+                  readingMode === "original"
+                    ? "bg-linear-to-r from-purple-600 to-medium-slate-blue text-white shadow-lg shadow-purple-500/30 border border-purple-400"
+                    : "bg-rich-black-light text-periwinkle hover:bg-periwinkle-light border border-navbar-border hover:border-periwinkle"
                   }`}
               >
                 <span className="material-icons text-lg">description</span>
@@ -394,7 +428,7 @@ export default function BlogDetail() {
               <input
                 type="text"
                 placeholder="Search in article"
-                className="bg-transparent border border-[#393B5A] text-white rounded-[8px] h-[49px] pl-12 pr-4 w-96 text-base focus:outline-none font-lato placeholder-periwinkle"
+                className="bg-transparent border border-[#393B5A] text-white rounded-lg h-[49px] pl-12 pr-4 w-96 text-base focus:outline-none font-lato placeholder-periwinkle"
               />
               <span className="material-icons absolute left-4 top-1/2 -translate-y-1/2 text-periwinkle text-xl">
                 search
@@ -459,13 +493,39 @@ export default function BlogDetail() {
           {/* Blog Content */}
           <div ref={contentRef} onMouseUp={handleTextSelection} className="mb-8">
             <div className="prose prose-invert max-w-none">
-              <div
-                className="text-white space-y-4 
-                          prose-pre:bg-rich-black-light prose-pre:border prose-pre:border-navbar-border prose-pre:rounded-lg prose-pre:p-4 prose-pre:overflow-x-auto 
-                          prose-h2:text-3xl prose-h2:font-fenix prose-h2:font-bold prose-h2:text-white prose-h2:tracking-wide
-                          prose-p:leading-snug prose-p:font-lato"
-                dangerouslySetInnerHTML={{ __html: contentToRender }}
-              />
+              {readingMode === "simplify" && loadingSimplification && (
+                <div className="flex items-center justify-center py-12">
+                  <div className="text-center">
+                    <div className="animate-spin mb-4">
+                      <span className="material-icons text-4xl text-periwinkle">hourglass_top</span>
+                    </div>
+                    <p className="text-periwinkle text-lg font-medium">Simplifying content...</p>
+                    <p className="text-periwinkle/60 text-sm mt-2">This may take a few moments</p>
+                  </div>
+                </div>
+              )}
+              {readingMode === "simplify" && !loadingSimplification && simplifiedContent && simplifiedContent.keyTakeaways && (
+                <div className="mb-6 p-4 bg-rich-black-light rounded-lg border border-navbar-border">
+                  <h3 className="text-periwinkle font-semibold mb-3">Key Takeaways:</h3>
+                  <ul className="space-y-2">
+                    {simplifiedContent.keyTakeaways.map((takeaway, idx) => (
+                      <li key={idx} className="text-white text-sm flex items-start">
+                        <span className="text-celadon mr-2 text-lg">•</span>
+                        <span>{takeaway}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {!loadingSimplification && (
+                <div
+                  className="text-white space-y-4 
+                            prose-pre:bg-rich-black-light prose-pre:border prose-pre:border-navbar-border prose-pre:rounded-lg prose-pre:p-4 prose-pre:overflow-x-auto 
+                            prose-h2:text-3xl prose-h2:font-fenix prose-h2:font-bold prose-h2:text-white prose-h2:tracking-wide
+                            prose-p:leading-snug prose-p:font-lato"
+                  dangerouslySetInnerHTML={{ __html: contentToRender }}
+                />
+              )}
             </div>
           </div>
 

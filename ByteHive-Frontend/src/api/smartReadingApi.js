@@ -27,11 +27,9 @@ smartReadingClient.interceptors.request.use(
  */
 export async function getMeaning(word) {
   try {
-    console.log(`📖 Fetching meaning for: "${word}"`);
     const response = await smartReadingClient.get('/meanings', {
       params: { word },
     });
-    console.log('✅ Meaning fetched successfully:', response.data.data);
     return response.data.data;
   } catch (error) {
     console.error('❌ Error fetching meaning:', error.message);
@@ -116,11 +114,9 @@ export async function getSimplification(postId, level = 'detailed') {
  */
 export async function searchBlogs(keyword) {
   try {
-    console.log(`🔍 Searching related blogs for: "${keyword}"`);
     const response = await smartReadingClient.get('/search', {
       params: { keyword },
     });
-    console.log(`✅ Found ${response.data.data.length} related blogs`);
     return response.data.data || [];
   } catch (error) {
     console.error('❌ Error searching blogs:', error.message);
@@ -151,4 +147,21 @@ export async function getRelatedBlogs(keyword) {
   }
 }
 
-export default smartReadingClient;
+/**
+ * Chat about a word with AI
+ * @param {string} word - The word to chat about
+ * @param {string} message - The user's message
+ * @returns {Promise<Object>} Chat response with AI answer
+ */
+export async function chatAboutWord(word, message) {
+  try {
+    const response = await smartReadingClient.post('/chat', {
+      word,
+      message,
+    });
+    return response.data.data;
+  } catch (error) {
+    console.error('❌ Error chatting about word:', error.message);
+    throw error;
+  }
+}

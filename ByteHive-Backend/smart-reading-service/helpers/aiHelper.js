@@ -1,73 +1,120 @@
 import { config } from '../config/env.js';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
-// Mock data for demonstration
-const mockMeanings = {
-  'next.js': {
-    word: 'Next.js',
-    definition: 'A powerful React framework that enables server-side rendering and static site generation for building modern web applications.',
-    pronunciation: '/ˈnekst dɒt dʒeɪ es/',
-    partOfSpeech: 'noun',
-    examples: [
-      'We built our application using Next.js for better performance.',
-      'Next.js provides built-in API routes for backend functionality.',
-    ],
-    synonyms: ['React framework', 'SSR framework'],
-    antonyms: [],
-  },
-  react: {
-    word: 'React',
-    definition: 'A JavaScript library for building user interfaces with reusable components and state management.',
-    pronunciation: '/riːˈækt/',
-    partOfSpeech: 'noun',
-    examples: [
-      'React components are reusable and composable.',
-      'The virtual DOM in React makes updates efficient.',
-    ],
-    synonyms: ['UI library', 'Component library'],
-    antonyms: [],
-  },
-  typescript: {
-    word: 'TypeScript',
-    definition: 'A typed superset of JavaScript that compiles to plain JavaScript, adding static type checking and better tooling support.',
-    pronunciation: '/ˈtaɪpˌskrɪpt/',
-    partOfSpeech: 'noun',
-    examples: [
-      'TypeScript catches type errors at compile time.',
-      'Using TypeScript improves code maintainability.',
-    ],
-    synonyms: ['Typed JavaScript', 'Static typing'],
-    antonyms: [],
-  },
-};
+// Initialize Gemini AI
+const genAI = new GoogleGenerativeAI(config.geminiApiKey);
+const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
 export async function getMeaningFromAI(word) {
-  const lowerWord = word.toLowerCase();
+  try {
+    // Try dictionary API first for real data
+    const response = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${word}`);
+    if (!response.ok) throw new Error('Word not found in dictionary');
 
-  // Check mock data first
-  if (mockMeanings[lowerWord]) {
-    return mockMeanings[lowerWord];
+    const data = await response.json();
+    const entry = data[0];
+
+    const meaning = entry.meanings[0];
+    const definition = meaning.definitions[0].definition;
+    const partOfSpeech = meaning.partOfSpeech;
+    const pronunciation = entry.phonetics?.find(p => p.text)?.text || `/${word}/`;
+    const examples = meaning.definitions.slice(0, 2).map(d => d.example || `Example sentence with ${word}.`).filter(Boolean);
+    const synonyms = meaning.synonyms?.slice(0, 5) || [];
+
+    return {
+      word: entry.word,
+      definition,
+      pronunciation,
+      partOfSpeech,
+      examples,
+      synonyms,
+      antonyms: meaning.antonyms?.slice(0, 3) || [],
+    };
+  } catch (error) {
+    console.log('Dictionary API failed, falling back to Gemini:', error.message);
+    // Fallback to Gemini AI
+    if (config.aiProvider === 'gemini' && config.geminiApiKey) {
+      return await getGeminiMeaning(word);
+    }
+
+    // If using other AI providers
+    if (config.aiProvider === 'openai' && config.openaiApiKey) {
+      return await getOpenAIMeaning(word);
+    }
+
+    // Default mock response
+    return {
+      word,
+      definition: `Definition of ${word} - This is a placeholder definition. Please provide real API integration.`,
+      pronunciation: '/word/',
+      partOfSpeech: 'noun',
+      examples: [`Example sentence with ${word}`],
+      synonyms: ['similar_word'],
+      antonyms: [],
+    };
   }
+}
 
-  // If using real AI providers
-  if (config.aiProvider === 'openai' && config.openaiApiKey) {
-    return await getOpenAIMeaning(word);
+async function getGeminiMeaning(word) {
+  try {
+    const prompt = `Provide a detailed definition for the word "${word}" in the following JSON format:
+    {
+      "word": "${word}",
+      "definition": "A clear, comprehensive definition",
+      "pronunciation": "Phonetic pronunciation in IPA format",
+      "partOfSpeech": "noun/verb/adjective/etc",
+      "examples": ["Example sentence 1", "Example sentence 2"],
+      "synonyms": ["synonym1", "synonym2"],
+      "antonyms": ["antonym1", "antonym2"]
+    }
+    
+    Make sure the response is valid JSON. If you don't know the word, provide a reasonable definition based on context.`;
+
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const text = response.text();
+
+    // Try to parse JSON response
+    try {
+      const parsed = JSON.parse(text);
+      return {
+        word: parsed.word || word,
+        definition: parsed.definition || `Definition for ${word}`,
+        pronunciation: parsed.pronunciation || `/${word}/`,
+        partOfSpeech: parsed.partOfSpeech || 'noun',
+        examples: parsed.examples || [`Example with ${word}`],
+        synonyms: parsed.synonyms || [],
+        antonyms: parsed.antonyms || [],
+      };
+    } catch (parseError) {
+      // If JSON parsing fails, extract information from text
+      console.warn('Failed to parse Gemini response as JSON, using fallback');
+      return {
+        word,
+        definition: text.split('.')[0] || `Definition for ${word}`,
+        pronunciation: `/${word}/`,
+        partOfSpeech: 'noun',
+        examples: [`Example with ${word}`],
+        synonyms: [],
+        antonyms: [],
+      };
+    }
+  } catch (error) {
+    console.error('Error calling Gemini API for meaning:', error);
+    return {
+      word,
+      definition: `AI-generated definition for ${word}`,
+      pronunciation: `/${word}/`,
+      partOfSpeech: 'noun',
+      examples: [`Example sentence with ${word}`],
+      synonyms: [],
+      antonyms: [],
+    };
   }
-
-  // Default mock response
-  return {
-    word,
-    definition: `Definition of ${word} - This is a placeholder definition. Please provide real API integration.`,
-    pronunciation: '/word/',
-    partOfSpeech: 'noun',
-    examples: [`Example sentence with ${word}`],
-    synonyms: ['similar_word'],
-    antonyms: [],
-  };
 }
 
 async function getOpenAIMeaning(word) {
   // Placeholder for OpenAI integration
-  // In production, integrate with OpenAI API
   console.log('🔄 OpenAI integration placeholder for:', word);
   return mockMeanings[word.toLowerCase()] || {
     word,
@@ -76,6 +123,10 @@ async function getOpenAIMeaning(word) {
 }
 
 export async function simplifyContentWithAI(content, level = 'detailed') {
+  if (config.aiProvider === 'gemini' && config.geminiApiKey) {
+    return await simplifyWithGemini(content, level);
+  }
+
   if (config.aiProvider === 'openai' && config.openaiApiKey) {
     return await simplifyWithOpenAI(content, level);
   }
@@ -89,15 +140,68 @@ export async function simplifyContentWithAI(content, level = 'detailed') {
   };
 }
 
+async function simplifyWithGemini(content, level = 'detailed') {
+  try {
+    const prompt = `Simplify the following text and provide the response in JSON format:
+
+Text to simplify:
+${content}
+
+Please provide:
+1. simplifiedContent: A simplified version of the text using easier words and shorter sentences
+2. conciseSummary: A brief 1-2 sentence summary
+3. detailedSummary: A more detailed summary (3-5 sentences)
+4. keyTakeaways: An array of 3-5 bullet points with the main points
+
+Response format:
+{
+  "simplifiedContent": "simplified text here",
+  "conciseSummary": "brief summary",
+  "detailedSummary": "detailed summary",
+  "keyTakeaways": ["point 1", "point 2", "point 3"]
+}`;
+
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const text = response.text();
+
+    try {
+      const parsed = JSON.parse(text);
+      return {
+        simplifiedContent: parsed.simplifiedContent || generateMockSimplification(content),
+        conciseSummary: parsed.conciseSummary || generateMockConciseSummary(content),
+        detailedSummary: parsed.detailedSummary || generateMockDetailedSummary(content),
+        keyTakeaways: parsed.keyTakeaways || generateMockKeyTakeaways(content),
+      };
+    } catch (parseError) {
+      console.warn('Failed to parse Gemini simplification response as JSON');
+      return {
+        simplifiedContent: generateMockSimplification(content),
+        conciseSummary: generateMockConciseSummary(content),
+        detailedSummary: generateMockDetailedSummary(content),
+        keyTakeaways: generateMockKeyTakeaways(content),
+      };
+    }
+  } catch (error) {
+    console.error('Error calling Gemini API for simplification:', error);
+    return {
+      simplifiedContent: generateMockSimplification(content),
+      conciseSummary: generateMockConciseSummary(content),
+      detailedSummary: generateMockDetailedSummary(content),
+      keyTakeaways: generateMockKeyTakeaways(content),
+    };
+  }
+}
+
 function generateMockSimplification(content) {
   // Remove complex sentences and simplify
   const sentences = content.split('. ');
   return sentences
-    .map((sentence) => simplifysentence(sentence.trim()))
+    .map((sentence) => simplifySentence(sentence.trim()))
     .join('. ');
 }
 
-function simplifysentence(sentence) {
+function simplifySentence(sentence) {
   // Replace complex words with simpler ones
   const complexToSimple = {
     utilize: 'use',
@@ -147,28 +251,39 @@ async function simplifyWithOpenAI(content, level) {
   };
 }
 
-export async function findRelatedBlogs(keyword, allPosts = []) {
-  // Filter posts by keyword relevance
-  const searchTerm = keyword.toLowerCase();
-  
-  const relatedPosts = allPosts
-    .filter((post) => {
-      const title = (post.post_title || '').toLowerCase();
-      const description = (post.post_description || '').toLowerCase();
-      return title.includes(searchTerm) || description.includes(searchTerm);
-    })
-    .slice(0, 3)
-    .map((post) => ({
-      postId: post._id || post.id,
-      title: post.post_title,
-      snippet: (post.post_description || '').substring(0, 100) + '...',
-      readTime: post.read_time || '5 min',
-      relevanceScore: calculateRelevance(post, searchTerm),
-      thumbnail: post.thumbnail,
-      author: post.author?.name || 'Unknown',
-    }));
+export async function chatAboutWord(word, userMessage) {
+  if (config.aiProvider === 'gemini' && config.geminiApiKey) {
+    return await chatWithGemini(word, userMessage);
+  }
 
-  return relatedPosts;
+  // Mock response
+  return `I understand you're asking about "${word}". ${userMessage} - This is a mock response. Please integrate with a real AI provider.`;
+}
+
+async function chatWithGemini(word, userMessage) {
+  try {
+    const prompt = `You are a helpful AI assistant specializing in explaining concepts related to "${word}". 
+
+User's question: "${userMessage}"
+
+Please provide a helpful, accurate response about "${word}" that addresses the user's question. Format your response as:
+
+1. A brief 2-line summary
+2. Key bullet points with important details
+
+Keep your entire response concise and focused on the most relevant information.
+
+Response:`;
+
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const text = response.text();
+
+    return text.trim();
+  } catch (error) {
+    console.error('Error calling Gemini API for chat:', error);
+    return `I'm sorry, I couldn't process your question about "${word}" right now. Please try again later.`;
+  }
 }
 
 function calculateRelevance(post, keyword) {

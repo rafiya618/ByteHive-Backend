@@ -1,9 +1,7 @@
 // src/context/ProfileContext.js
 import { createContext, useContext, useEffect, useState } from "react";
 import { getProfile } from '../api/ProfileApi';
-import axios from "axios";
 import { useAuth } from "./auth";
-import { jwtDecode } from 'jwt-decode';
 
 const ProfileContext = createContext();
 
@@ -18,7 +16,6 @@ export const ProfileProvider = ({ children }) => {
       if (!auth?.user?._id || auth?.user?.onboardingStep !== 4) return;
       setLoading(true);
       const res = await getProfile(auth?.user?._id);
-      console.log('res', res.data)
       setProfile(res?.data);
     } catch (err) {
       console.error("Failed to fetch profile:", err);

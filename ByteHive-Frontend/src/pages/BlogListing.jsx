@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import SearchBar from "../shared/SearchBar";
 import NewPostButton from "../shared/NewPostButton";
 import Navbar from "../shared/Navbar";
@@ -21,40 +21,70 @@ const BlogListing = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     // Fetch blogs from API
     const fetchBlogs = async () => {
+      const cacheKey = 'feedBlogs';
+      const cachedData = localStorage.getItem(cacheKey);
+      
+      if (cachedData) {
+        try {
+          const { data, timestamp } = JSON.parse(cachedData);
+          const cacheAge = Date.now() - timestamp;
+          const cacheExpiry = 15 * 60 * 1000; // 5 minutes in milliseconds
+          
+          if (cacheAge < cacheExpiry) {
+            setBlogs(data);
+            setLoading(false);
+            return;
+          } else {
+            localStorage.removeItem(cacheKey);
+          }
+        } catch (error) {
+          console.warn('Error parsing cached feed blogs:', error);
+          localStorage.removeItem(cacheKey);
+        }
+      }
+
       setLoading(true);
       setErr("");
       try {
         const res = await axios.get("http://localhost:5000/api/posts");
-        setBlogs(
-  Array.isArray(res.data.posts)
-    ? res.data.posts.map((post) => ({
-        id: post._id,   // ✅ here
-        image: post.thumbnail || DEFAULT_IMAGE,
-        community: post.community || "",
-        date: post.createdAt
-          ? new Date(post.createdAt).toLocaleDateString()
-          : "",
-        readTime: post.read_time || "6 min",   // ✅ use correct field from DB
-        title: post.post_title || "",
-        description: post.small_description || "",
-        tags: post.tags || [],
-        author: post.author || {
-          name: "Unknown",
-          avatar:
-            "https://ui-avatars.com/api/?name=User&background=0D8ABC&color=fff",
-        },
-        upvotes: post.upvotes || 0,
-        downvotes: post.downvotes || 0,
-        comments: post.comments || 0,
-        views: post.views || 0,
-        bookmarked: false,
-      }))
-    : []
-);
+        const processedBlogs = Array.isArray(res.data.posts)
+          ? res.data.posts.map((post) => ({
+              id: post._id,
+              image: post.thumbnail || DEFAULT_IMAGE,
+              community: post.community || "",
+              date: post.createdAt
+                ? new Date(post.createdAt).toLocaleDateString()
+                : "",
+              readTime: post.read_time || "6 min",
+              title: post.post_title || "",
+              description: post.small_description || "",
+              tags: post.tags || [],
+              author: post.author || {
+                name: "Unknown",
+                avatar:
+                  "https://ui-avatars.com/api/?name=User&background=0D8ABC&color=fff",
+              },
+              upvotes: post.upvotes || 0,
+              downvotes: post.downvotes || 0,
+              comments: post.comments || 0,
+              views: post.views || 0,
+              bookmarked: false,
+            }))
+          : [];
+
+        setBlogs(processedBlogs);
+        
+        // Cache the result
+        const cacheData = {
+          data: processedBlogs,
+          timestamp: Date.now(),
+        };
+        localStorage.setItem(cacheKey, JSON.stringify(cacheData));
 
       } catch (err) {
         setBlogs([]);
@@ -68,6 +98,62 @@ const BlogListing = () => {
     };
     fetchBlogs();
   }, []);
+
+  // Force refresh function
+  const handleForceRefresh = async () => {
+    setRefreshing(true);
+    setErr("");
+    
+    // Clear cache
+    const cacheKey = 'feedBlogs';
+    localStorage.removeItem(cacheKey);
+    
+    try {
+      const res = await axios.get("http://localhost:5000/api/posts");
+      const processedBlogs = Array.isArray(res.data.posts)
+        ? res.data.posts.map((post) => ({
+            id: post._id,
+            image: post.thumbnail || DEFAULT_IMAGE,
+            community: post.community || "",
+            date: post.createdAt
+              ? new Date(post.createdAt).toLocaleDateString()
+              : "",
+            readTime: post.read_time || "6 min",
+            title: post.post_title || "",
+            description: post.small_description || "",
+            tags: post.tags || [],
+            author: post.author || {
+              name: "Unknown",
+              avatar:
+                "https://ui-avatars.com/api/?name=User&background=0D8ABC&color=fff",
+            },
+            upvotes: post.upvotes || 0,
+            downvotes: post.downvotes || 0,
+            comments: post.comments || 0,
+            views: post.views || 0,
+            bookmarked: false,
+          }))
+        : [];
+
+      setBlogs(processedBlogs);
+      
+      // Cache the fresh result
+      const cacheData = {
+        data: processedBlogs,
+        timestamp: Date.now(),
+      };
+      localStorage.setItem(cacheKey, JSON.stringify(cacheData));
+      
+    } catch (err) {
+      setBlogs([]);
+      setErr(
+        err?.response?.data?.error ||
+        err?.message ||
+        "Failed to refresh blogs. Please try again."
+      );
+    }
+    setRefreshing(false);
+  };
 
   return (
     <div className="min-h-screen bg-rich-black flex flex-col relative">
@@ -93,9 +179,21 @@ const BlogListing = () => {
         {/* Blurred Background Glow */}
         <div className="w-full max-w-7xl z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           {/* Row 1: Title */}
-          <h2 className="font-fenix text-[28px] text-white font-normal text-center md:text-left">
-            Your Feed
-          </h2>
+          <div className="flex items-center gap-3">
+            <h2 className="font-fenix text-[28px] text-white font-normal text-center md:text-left">
+              Your Feed
+            </h2>
+            <button
+              onClick={handleForceRefresh}
+              disabled={refreshing}
+              className="p-2 rounded-lg bg-navbar-bg border border-navbar-border hover:bg-navbar-border transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Refresh feed"
+            >
+              <span className={`material-icons text-periwinkle ${refreshing ? 'animate-spin' : ''}`}>
+                {refreshing ? 'refresh' : 'refresh'}
+              </span>
+            </button>
+          </div>
 
           {/* Row 2: Search + Post */}
           <div className="flex justify-center items-center gap-2 w-full md:flex-1 md:justify-center md:px-12">
@@ -149,7 +247,7 @@ const BlogListing = () => {
           </div>
 
           {/* Right Column - Sidebar */}
-          <aside className="w-full lg:w-[380px] xl:w-[420px] flex-shrink-0 flex flex-col gap-6">
+          <aside className="w-full lg:w-[380px] xl:w-[420px] shrink-0 flex flex-col gap-6">
             <PopularTags />
             <PopularCommunities />
             <UpcomingEvents />

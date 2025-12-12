@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import Logo from "../assets/BytehiveLogo.png";
 import { useNavigate } from "react-router-dom";
 import { useProfile } from "../context/profileContext";
@@ -27,7 +27,6 @@ export default function Navbar() {
   const fetchCurrentStreak = async () => {
     try {
       const streakData = await getUserStreak();
-      console.log('Current streak data:', streakData);
       // Handle different response structures
       const streakValue = streakData?.streak?.current_streak || 
                          streakData?.current_streak || 

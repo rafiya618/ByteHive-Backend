@@ -12,10 +12,8 @@ const api = axios.create({
 const getAuthToken = () => {
   try {
     const authData = localStorage.getItem('Auth');
-    console.log('🔑 Retrieved Auth from localStorage:', authData ? 'Found' : 'NOT FOUND');
     if (authData) {
       const parsed = JSON.parse(authData);
-      console.log('📦 Parsed auth data:', { hasToken: !!parsed.token, email: parsed.email });
       return parsed.token;
     }
     return null;
@@ -32,10 +30,8 @@ const getUserIdFromToken = () => {
     if (!token) return null;
 
     const decoded = jwtDecode(token);
-    console.log('🔓 Decoded JWT token:', decoded);
     // Check various possible userId field names
     const userId = decoded?._id || decoded?.id || decoded?.user_id || decoded?.userId || decoded?.sub;
-    console.log('✅ Extracted userId:', userId, 'from fields:', Object.keys(decoded));
     return userId;
   } catch (error) {
     console.error('Error decoding token:', error);
@@ -90,7 +86,6 @@ export const recordActivity = async (activityType, postId = null, commentId = nu
 export const getUserStreak = async (userId = null) => {
   try {
     const uid = userId || getUserIdFromToken();
-    console.log('🔥 Fetching streak for user ID:', uid);
 
     if (!uid) {
       console.warn('❌ No user ID found in token');
@@ -114,13 +109,10 @@ export const getUserStreak = async (userId = null) => {
       };
     }
 
-    console.log('📡 Making API request to:', `/retention/streak/${uid}`);
     const response = await api.get(`/retention/streak/${uid}`);
-    console.log('✅ Streak API response received:', response.data);
 
     // Extract streak data from response structure
     const streakData = response.data?.streak || response.data;
-    console.log('📊 Extracted streak data:', streakData);
 
     const result = {
       current_streak: streakData?.current_streak ?? 0,
@@ -142,7 +134,6 @@ export const getUserStreak = async (userId = null) => {
       badges_earned: streakData?.badges_earned ?? [],
       badge_details: streakData?.badge_details ?? []
     };
-    console.log('🎯 Final result to return:', result);
     return result;
   } catch (error) {
     console.error('❌ Error fetching user streak:', {

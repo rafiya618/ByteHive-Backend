@@ -9,6 +9,7 @@ import { authMiddleware } from './middleware/authMiddleware.js';
 import meaningRoutes from './routes/meaningRoutes.js';
 import simplificationRoutes from './routes/simplificationRoutes.js';
 import searchRoutes from './routes/searchRoutes.js';
+import chatRoutes from './routes/chatRoutes.js';
 
 const app = express();
 
@@ -30,6 +31,7 @@ app.get('/health', (req, res) => {
 app.use('/smart-reading', meaningRoutes);
 app.use('/smart-reading', simplificationRoutes);
 app.use('/smart-reading', searchRoutes);
+app.use('/smart-reading', chatRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
