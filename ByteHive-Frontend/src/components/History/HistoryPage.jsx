@@ -1,189 +1,256 @@
-import { useState, useEffect } from "react";
-import { getActivityHistory } from "../../api/retentionApi";
+import { useState, useEffect, useRef } from "react";
+import SearchBar from "../../shared/SearchBar";
+import BlogCard from "../BlogListing/BlogCard";
+import { getHistory, clearHistory, deleteHistoryItems } from "../../api/curationApi";
 import { postsApi } from "../../api/postsApi";
 
-// Action icons and labels mapping
-const ACTION_CONFIG = {
-  view: { icon: "visibility", label: "Viewed", color: "text-blue-400", bgColor: "bg-blue-400/20" },
-  read: { icon: "menu_book", label: "Read", color: "text-blue-500", bgColor: "bg-blue-500/20" },
-  like: { icon: "thumb_up", label: "Liked", color: "text-green-400", bgColor: "bg-green-400/20" },
-  downvote: { icon: "thumb_down", label: "Downvoted", color: "text-red-400", bgColor: "bg-red-400/20" },
-  comment: { icon: "chat_bubble", label: "Commented on", color: "text-purple-400", bgColor: "bg-purple-400/20" },
-  comment_view: { icon: "forum", label: "Viewed comment", color: "text-cyan-400", bgColor: "bg-cyan-400/20" },
-  post: { icon: "edit_note", label: "Created post", color: "text-yellow-400", bgColor: "bg-yellow-400/20" },
-  simplify: { icon: "auto_fix_high", label: "Simplified", color: "text-amber-400", bgColor: "bg-amber-400/20" },
-  word_meaning: { icon: "translate", label: "Looked up", color: "text-pink-400", bgColor: "bg-pink-400/20" },
-  search: { icon: "search", label: "Searched", color: "text-indigo-400", bgColor: "bg-indigo-400/20" },
-};
-
-// Format relative time
-const formatRelativeTime = (date) => {
-  const now = new Date();
-  const then = new Date(date);
-  const diffMs = now - then;
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
-
-  if (diffMins < 1) return "Just now";
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  if (diffDays < 7) return `${diffDays}d ago`;
-  return then.toLocaleDateString();
-};
-
-// Format full date time
-const formatFullDateTime = (date) => {
-  const d = new Date(date);
-  return d.toLocaleString('en-US', {
-    weekday: 'short',
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: true
-  });
-};
-
-// Single history event item component
-const HistoryEventItem = ({ event, postDetails }) => {
-  const config = ACTION_CONFIG[event.activity_type] || ACTION_CONFIG.view;
-  const targetTitle = postDetails?.post_title || postDetails?.title || null;
-  const targetId = event.target_id || event.post_id;
-
-  // Determine display text based on activity type
-  const getDisplayContent = () => {
-    if (event.activity_type === 'word_meaning' || event.activity_type === 'search') {
-      return event.activity_description || 'Unknown action';
-    }
-    if (event.activity_type === 'simplify') {
-      return targetTitle || event.activity_description || 'Simplified content';
-    }
-    return targetTitle || 'Unknown content';
-  };
-
-  const displayContent = getDisplayContent();
-  const hasLink = targetId && ['view', 'read', 'like', 'downvote', 'comment', 'comment_view', 'post', 'simplify'].includes(event.activity_type);
-
-  return (
-    <div className="flex items-center gap-3 p-3 bg-gray-900/50 border border-gray-800 rounded-lg hover:bg-gray-800/50 transition-colors">
-      {/* Action Icon - Compact */}
-      <div className={`shrink-0 w-9 h-9 rounded-lg ${config.bgColor} flex items-center justify-center`}>
-        <span className={`material-icons text-lg ${config.color}`}>{config.icon}</span>
-      </div>
-
-      {/* Event Details - Minimal */}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <span className={`text-sm font-medium ${config.color}`}>{config.label}</span>
-          <span className="text-gray-600 text-xs">
-            {formatRelativeTime(event.activity_date || event.createdAt)}
-          </span>
-        </div>
-        <p className="text-gray-300 text-sm truncate">{displayContent}</p>
-      </div>
-
-      {/* View Post Button */}
-      {hasLink && (
-        <a
-          href={`/post/${targetId}`}
-          className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-periwinkle/20 text-periwinkle text-sm rounded-lg hover:bg-periwinkle/30 transition-colors"
-        >
-          <span className="material-icons text-base">open_in_new</span>
-          <span className="hidden sm:inline">View</span>
-        </a>
-      )}
-    </div>
-  );
-};
-
 const HistoryPage = () => {
-  const [activities, setActivities] = useState([]);
-  const [postDetailsMap, setPostDetailsMap] = useState({});
+  const [historyItems, setHistoryItems] = useState([]);
+  const [selectedItems, setSelectedItems] = useState([]);
+  const [showOptions, setShowOptions] = useState(false);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const kebabRef = useRef();
+  // Delete selected items (in selection mode)
+  const handleDeleteSelected = async () => {
+    if (selectedItems.length === 0) {
+      alert("No items selected.");
+      return;
+    }
+    if (!window.confirm("Delete selected history items?")) return;
+    setLoading(true);
+    setError(null);
+    try {
+      await deleteHistoryItems(selectedItems);
+      setHistoryItems((prev) => prev.filter((item) => !selectedItems.includes(item.historyId || item._id)));
+      setSelectedItems([]);
+      setSelectionMode(false);
+    } catch (err) {
+      setError(err.message || "Failed to delete selected items");
+    } finally {
+      setLoading(false);
+    }
+  };
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [hasMore, setHasMore] = useState(true);
-  const [skip, setSkip] = useState(0);
-  const [activeFilter, setActiveFilter] = useState('all'); // Filter state
-  const limit = 50;
+  const [page, setPage] = useState(1);
 
-  // Get filtered activities
-  const filteredActivities = activeFilter === 'all'
-    ? activities
-    : activities.filter(a => a.activity_type === activeFilter);
-
-  // Fetch post details for activities
-  const fetchPostDetails = async (postIds) => {
-    const uniqueIds = [...new Set(postIds.filter(Boolean))];
-    const newDetails = {};
-
-    await Promise.all(
-      uniqueIds.map(async (postId) => {
-        if (!postDetailsMap[postId]) {
-          try {
-            const response = await postsApi.getPostById(postId);
-            newDetails[postId] = response.post || response;
-          } catch (err) {
-            console.error(`Error fetching post ${postId}:`, err);
-            newDetails[postId] = { title: "Post unavailable" };
-          }
-        }
-      })
-    );
-
-    if (Object.keys(newDetails).length > 0) {
-      setPostDetailsMap((prev) => ({ ...prev, ...newDetails }));
+  const fetchPostDetails = async (postId) => {
+    try {
+      console.log("Fetching post details for postId:", postId);
+      const response = await postsApi.getPostById(postId);
+      console.log("Post details response:", response);
+      return response.post || response;
+    } catch (error) {
+      console.error("Error fetching post details for", postId, ":", error);
+      return null;
     }
   };
 
-  // Fetch activity history
-  const fetchHistory = async (reset = false) => {
+  const fetchHistory = async () => {
     try {
       setLoading(true);
       setError(null);
+      console.log("Component: Fetching history for page:", page);
 
-      const currentSkip = reset ? 0 : skip;
-      console.log("Fetching activity history:", { skip: currentSkip, limit });
+      const response = await getHistory(page);
+      console.log("Component: History API response:", response);
 
-      const response = await getActivityHistory(currentSkip, limit);
-      console.log("Activity history response:", response);
+      // Handle different possible response structures
+      let historyData = [];
 
-      const newActivities = response.activities || [];
-
-      if (reset) {
-        setActivities(newActivities);
-        setSkip(newActivities.length);
-      } else {
-        setActivities((prev) => [...prev, ...newActivities]);
-        setSkip((prev) => prev + newActivities.length);
+      if (response) {
+        if (Array.isArray(response)) {
+          historyData = response;
+        } else if (response.data) {
+          if (Array.isArray(response.data)) {
+            historyData = response.data;
+          } else if (response.data.history && Array.isArray(response.data.history)) {
+            historyData = response.data.history;
+          }
+        } else if (response.history && Array.isArray(response.history)) {
+          historyData = response.history;
+        } else if (response.success && response.data) {
+          historyData = Array.isArray(response.data) ? response.data : [];
+        }
       }
 
-      setHasMore(newActivities.length === limit);
+      console.log("Component: Processed history data:", historyData);
+      console.log("Component: History data length:", historyData.length);
 
-      // Fetch post details for the new activities
-      const postIds = newActivities.map((a) => a.target_id || a.post_id);
-      await fetchPostDetails(postIds);
+      // Fetch full post details for each history item
+      if (historyData.length > 0) {
+        console.log("Fetching post details for", historyData.length, "history items");
+        const historyWithPosts = await Promise.all(
+          historyData.map(async (historyItem) => {
+            const postDetails = await fetchPostDetails(historyItem.postId);
 
+            if (postDetails) {
+              // Combine history metadata with post data
+              return {
+                ...postDetails,
+                // History-specific fields
+                _id: historyItem._id,
+                viewedAt: historyItem.viewedAt,
+                historyId: historyItem._id,
+                // Use post data but keep history timestamp
+                image: postDetails.thumbnail || postDetails.image,
+                title: postDetails.post_title || postDetails.title,
+                description: postDetails.small_description || postDetails.description,
+                postId: historyItem.postId,
+                // Ensure all required fields exist
+                community: postDetails.community || postDetails.community_name || "Unknown",
+                readTime: postDetails.readTime || "5 min read",
+                tags: Array.isArray(postDetails.tags) ? postDetails.tags : [],
+                author: postDetails.author || { name: "Unknown", avatar: "" },
+                upvotes: postDetails.upvotes || 0,
+                downvotes: postDetails.downvotes || 0,
+                comments: postDetails.comments || 0,
+                views: postDetails.views || 0
+              };
+            } else {
+              // If post details couldn't be fetched, return basic info
+              console.warn("Could not fetch post details for:", historyItem.postId);
+              return {
+                _id: historyItem._id,
+                postId: historyItem.postId,
+                viewedAt: historyItem.viewedAt,
+                title: "Post no longer available",
+                description: "This post may have been deleted or is no longer accessible",
+                community: "Unknown",
+                readTime: "0 min read",
+                tags: [],
+                author: { name: "Unknown", avatar: "" },
+                upvotes: 0,
+                downvotes: 0,
+                comments: 0,
+                views: 0,
+                image: null
+              };
+            }
+          })
+        );
+
+        console.log("History with post details:", historyWithPosts);
+        setHistoryItems(historyWithPosts);
+      } else {
+        setHistoryItems([]);
+      }
     } catch (err) {
-      console.error("Error fetching activity history:", err);
-      setError(err.message || "Failed to fetch history");
+      console.error("Component: Error fetching history:", err);
+      const errorMessage = err.message || err.error || 'Failed to fetch history';
+      setError(errorMessage);
+      setHistoryItems([]);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchHistory(true);
-  }, []);
+    fetchHistory();
+  }, [page]);
 
-  const handleLoadMore = () => {
-    if (!loading && hasMore) {
-      fetchHistory(false);
+  const handleSearch = async (searchTerm) => {
+    if (!searchTerm.trim()) {
+      fetchHistory();
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      // Fetch all history
+      const response = await getHistory(page);
+      let historyData = [];
+      if (response) {
+        if (Array.isArray(response)) {
+          historyData = response;
+        } else if (response.data) {
+          if (Array.isArray(response.data)) {
+            historyData = response.data;
+          } else if (response.data.history && Array.isArray(response.data.history)) {
+            historyData = response.data.history;
+          }
+        } else if (response.history && Array.isArray(response.history)) {
+          historyData = response.history;
+        } else if (response.success && response.data) {
+          historyData = Array.isArray(response.data) ? response.data : [];
+        }
+      }
+      // Fetch post details for all history
+      const historyWithPosts = await Promise.all(
+        historyData.map(async (historyItem) => {
+          const postDetails = await fetchPostDetails(historyItem.postId);
+          if (postDetails) {
+            return {
+              ...postDetails,
+              _id: historyItem._id,
+              viewedAt: historyItem.viewedAt,
+              historyId: historyItem._id,
+              image: postDetails.thumbnail || postDetails.image,
+              title: postDetails.post_title || postDetails.title,
+              description: postDetails.small_description || postDetails.description,
+              postId: historyItem.postId,
+              community: postDetails.community || postDetails.community_name || "Unknown",
+              readTime: postDetails.readTime || "5 min read",
+              tags: Array.isArray(postDetails.tags) ? postDetails.tags : [],
+              author: postDetails.author || { name: "Unknown", avatar: "" },
+              upvotes: postDetails.upvotes || 0,
+              downvotes: postDetails.downvotes || 0,
+              comments: postDetails.comments || 0,
+              views: postDetails.views || 0
+            };
+          } else {
+            return {
+              _id: historyItem._id,
+              postId: historyItem.postId,
+              viewedAt: historyItem.viewedAt,
+              title: "Post no longer available",
+              description: "This post may have been deleted or is no longer accessible",
+              community: "Unknown",
+              readTime: "0 min read",
+              tags: [],
+              author: { name: "Unknown", avatar: "" },
+              upvotes: 0,
+              downvotes: 0,
+              comments: 0,
+              views: 0,
+              image: null
+            };
+          }
+        })
+      );
+      // Filter by search term (title or description)
+      const filtered = historyWithPosts.filter(item =>
+        (item.title && item.title.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (item.description && item.description.toLowerCase().includes(searchTerm.toLowerCase()))
+      );
+      setHistoryItems(filtered);
+    } catch (err) {
+      setError(err.message || 'Failed to search history');
+      setHistoryItems([]);
+    } finally {
+      setLoading(false);
     }
   };
 
-  if (error && activities.length === 0) {
+  const handleClearHistory = async () => {
+    if (!window.confirm("Are you sure you want to clear your entire history?")) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError(null);
+      await clearHistory();
+      setHistoryItems([]);
+    } catch (err) {
+      console.error("Error clearing history:", err); // Debug log
+      setError(err.message || "Failed to clear history");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (error) {
     return (
       <div className="min-h-screen bg-rich-black flex items-center justify-center">
         <div className="text-center">
@@ -194,12 +261,6 @@ const HistoryPage = () => {
             Something went wrong
           </h3>
           <p className="text-columbia-blue">{error}</p>
-          <button
-            onClick={() => fetchHistory(true)}
-            className="mt-4 px-4 py-2 bg-periwinkle text-white rounded-lg hover:bg-periwinkle/80 transition-colors"
-          >
-            Try Again
-          </button>
         </div>
       </div>
     );
@@ -227,111 +288,128 @@ const HistoryPage = () => {
       <div className="container mx-auto px-5 sm:px-7 lg:px-10 py-8 relative z-10">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="font-fenix text-[28px] text-white mb-1">
-            Activity History
-          </h1>
-          <p className="text-desc text-base">
-            Your complete activity timeline — every action recorded
-          </p>
-        </div>
+          <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6 mb-6">
+            <div>
+              <h1 className="font-fenix text-[28px] text-white mb-1">
+                History
+              </h1>
+              <p className="text-desc text-base">Your recently viewed posts</p>
+            </div>
 
-        {/* Filter Buttons */}
-        <div className="mb-6">
-          <p className="text-gray-400 text-sm mb-3">Filter by activity type:</p>
-          <div className="flex gap-2 flex-wrap">
-            {/* All Button */}
-            <button
-              onClick={() => setActiveFilter('all')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all duration-200 ${activeFilter === 'all'
-                ? 'bg-periwinkle text-white shadow-lg shadow-periwinkle/30'
-                : 'bg-gray-800/50 text-gray-300 hover:bg-gray-700/50'
-                }`}
-            >
-              <span className="material-icons text-sm">apps</span>
-              <span className="text-sm font-medium">All</span>
-              <span className="text-xs opacity-70">({activities.length})</span>
-            </button>
-
-            {/* Activity Type Buttons */}
-            {Object.entries(ACTION_CONFIG).map(([key, config]) => {
-              const count = activities.filter((a) => a.activity_type === key).length;
-              if (count === 0) return null;
-              return (
-                <button
-                  key={key}
-                  onClick={() => setActiveFilter(key)}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all duration-200 ${activeFilter === key
-                    ? `${config.bgColor} ${config.color} shadow-lg`
-                    : 'bg-gray-800/50 text-gray-300 hover:bg-gray-700/50'
-                    }`}
-                >
-                  <span className={`material-icons text-sm ${activeFilter === key ? config.color : ''}`}>
-                    {config.icon}
-                  </span>
-                  <span className="text-sm font-medium capitalize">{key.replace('_', ' ')}</span>
-                  <span className="text-xs opacity-70">({count})</span>
-                </button>
-              );
-            })}
+            {/* Search Bar and Clear Button */}
+            <div className="flex items-center gap-4 w-full md:w-[500px]">
+              <SearchBar onSearch={handleSearch} />
+              {historyItems.length > 0 && (
+                <div className="relative" ref={kebabRef}>
+                  <button
+                    onClick={() => setShowOptions((v) => !v)}
+                    className="p-2 rounded-full hover:bg-periwinkle-light focus:outline-none"
+                    aria-label="Options"
+                  >
+                    <span className="material-icons">more_vert</span>
+                  </button>
+                  {showOptions && (
+                    <div className="absolute right-0 mt-2 w-44 bg-rich-black border border-navbar-border rounded-lg shadow-lg z-50">
+                      <button
+                        className="block w-full text-left px-4 py-2 hover:bg-periwinkle-light text-white"
+                        onClick={() => { setShowOptions(false); handleClearHistory(); }}
+                      >
+                        Clear History
+                      </button>
+                      <button
+                        className="block w-full text-left px-4 py-2 hover:bg-red-500 text-white"
+                        onClick={() => { setShowOptions(false); setSelectionMode(true); setSelectedItems([]); }}
+                      >
+                        Delete Selected
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
-        {/* Activity List */}
-        {loading && activities.length === 0 ? (
+        {/* History Items Grid */}
+        {loading ? (
           <div className="text-center py-16">
             <span className="material-icons text-6xl text-columbia-blue animate-spin">
               refresh
             </span>
-            <p className="text-columbia-blue mt-4">Loading your activity history...</p>
+            <p className="text-columbia-blue mt-4">Loading your history...</p>
           </div>
         ) : (
-          <div className="space-y-3">
-            {filteredActivities.length > 0 ? (
+          <div className="space-y-6">
+            {historyItems.length > 0 ? (
               <>
-                {/* Show filter info */}
-                {activeFilter !== 'all' && (
-                  <div className="flex items-center gap-2 text-gray-400 text-sm mb-4">
-                    <span>Showing {filteredActivities.length} {activeFilter.replace('_', ' ')} activities</span>
+                {selectionMode && (
+                  <div className="flex items-center mb-4 gap-2">
                     <button
-                      onClick={() => setActiveFilter('all')}
-                      className="text-periwinkle hover:underline"
+                      onClick={() => setSelectionMode(false)}
+                      className="px-3 py-1 text-sm bg-gray-700 rounded hover:bg-gray-600"
                     >
-                      Clear filter
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleDeleteSelected}
+                      className="px-3 py-1 text-sm bg-red-600 rounded text-white hover:bg-red-700"
+                      disabled={selectedItems.length === 0}
+                    >
+                      Delete Selected ({selectedItems.length})
                     </button>
                   </div>
                 )}
-                {filteredActivities.map((event, index) => (
-                  <HistoryEventItem
-                    key={event._id || `${event.activity_type}-${index}`}
-                    event={event}
-                    postDetails={postDetailsMap[event.target_id || event.post_id]}
-                  />
-                ))}
-
-                {/* Load More Button */}
-                {hasMore && (
-                  <div className="text-center pt-4">
-                    <button
-                      onClick={handleLoadMore}
-                      disabled={loading}
-                      className="px-6 py-2 bg-periwinkle text-white rounded-lg hover:bg-periwinkle/80 transition-colors disabled:opacity-50"
-                    >
-                      {loading ? "Loading..." : "Load More"}
-                    </button>
-                  </div>
-                )}
+                {historyItems.map((item) => {
+                  const itemId = item.historyId || item._id;
+                  return (
+                    <div key={itemId} className="flex items-center">
+                      {selectionMode && (
+                        <input
+                          type="checkbox"
+                          checked={selectedItems.includes(itemId)}
+                          onChange={() => setSelectedItems((prev) =>
+                            prev.includes(itemId)
+                              ? prev.filter((id) => id !== itemId)
+                              : [...prev, itemId]
+                          )}
+                          className="mr-4"
+                        />
+                      )}
+                      <div className="flex-1">
+                        <BlogCard
+                          id={item.postId || item._id}
+                          image={item.image}
+                          community={item.community}
+                          date={new Date(item.viewedAt || item.createdAt).toLocaleDateString()}
+                          readTime={item.readTime}
+                          title={item.title}
+                          description={item.description}
+                          tags={item.tags}
+                          author={item.author}
+                          upvotes={item.upvotes}
+                          downvotes={item.downvotes}
+                          comments={item.comments}
+                          views={item.views}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
               </>
             ) : (
               <div className="text-center py-16">
                 <span className="material-icons text-6xl text-columbia-blue mb-4 block">
-                  history
+                  search_off
                 </span>
                 <h3 className="font-fenix text-2xl text-white mb-2">
-                  No activity yet
+                  No items found
                 </h3>
                 <p className="text-columbia-blue">
-                  Start exploring posts to build your activity history
+                  {error ? 'An error occurred while searching.' : 'No posts match your search.'}
                 </p>
+                {error && (
+                  <p className="text-red-500 mt-2 text-sm">Debug: {error}</p>
+                )}
               </div>
             )}
           </div>
