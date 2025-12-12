@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { getMeaning, searchBlogs, chatAboutWord, simplifyPost } from "../../api/smartReadingApi";
+import { recordActivity } from "../../api/retentionApi";
 import toast from "react-hot-toast";
 
 const TextSelectionPopup = ({ selectedText, onClose }) => {
@@ -25,13 +26,13 @@ const TextSelectionPopup = ({ selectedText, onClose }) => {
   const fetchMeaning = useCallback(async () => {
     const cacheKey = `meaning_${selectedText.split(" ")[0]}`;
     const cachedData = localStorage.getItem(cacheKey);
-    
+
     if (cachedData) {
       try {
         const { data, timestamp } = JSON.parse(cachedData);
         const cacheAge = Date.now() - timestamp;
         const cacheExpiry = 60 * 60 * 1000; // 1 hour in milliseconds
-        
+
         if (cacheAge < cacheExpiry) {
           setMeaningData(data);
           setLoadingMeaning(false);
@@ -50,13 +51,20 @@ const TextSelectionPopup = ({ selectedText, onClose }) => {
       const word = selectedText.split(" ")[0];
       const data = await getMeaning(word);
       setMeaningData(data);
-      
+
       // Cache the result
       const cacheData = {
         data: data,
         timestamp: Date.now(),
       };
       localStorage.setItem(cacheKey, JSON.stringify(cacheData));
+
+      // Record word meaning activity
+      try {
+        await recordActivity('word_meaning', null, null, `Looked up meaning of: ${word}`);
+      } catch (err) {
+        console.warn('Failed to record word_meaning activity:', err);
+      }
     } catch (error) {
       console.error("Error fetching meaning:", error);
       toast.error("Failed to fetch meaning");
@@ -74,13 +82,13 @@ const TextSelectionPopup = ({ selectedText, onClose }) => {
   const fetchRelatedBlogs = useCallback(async () => {
     const cacheKey = `relatedBlogs_${selectedText}`;
     const cachedData = localStorage.getItem(cacheKey);
-    
+
     if (cachedData) {
       try {
         const { data, timestamp } = JSON.parse(cachedData);
         const cacheAge = Date.now() - timestamp;
         const cacheExpiry = 60 * 60 * 1000; // 1 hour in milliseconds
-        
+
         if (cacheAge < cacheExpiry) {
           setRelatedBlogs(data);
           setLoadingBlogs(false);
@@ -98,7 +106,7 @@ const TextSelectionPopup = ({ selectedText, onClose }) => {
       setLoadingBlogs(true);
       const blogs = await searchBlogs(selectedText);
       setRelatedBlogs(blogs);
-      
+
       // Cache the result
       const cacheData = {
         data: blogs,
@@ -146,7 +154,7 @@ const TextSelectionPopup = ({ selectedText, onClose }) => {
       // Get AI response
       const chatResponse = await chatAboutWord(selectedText.split(" ")[0], searchQuery);
       console.log('Chat response received:', chatResponse);
-      
+
       // Handle different response structures
       let aiContent = '';
       if (typeof chatResponse === 'string') {
@@ -154,10 +162,15 @@ const TextSelectionPopup = ({ selectedText, onClose }) => {
       } else if (chatResponse && chatResponse.aiResponse) {
         aiContent = chatResponse.aiResponse;
       } else if (chatResponse && typeof chatResponse === 'object') {
-        // Try to find the response in any property
-        aiContent = chatResponse.response || chatResponse.message || chatResponse.content || JSON.stringify(chatResponse);
+        // Check for structured response
+        if (chatResponse.summary || chatResponse.keyPoints) {
+          aiContent = chatResponse; // Keep the object structure
+        } else {
+          // Try to find the response in any property
+          aiContent = chatResponse.response || chatResponse.message || chatResponse.content || JSON.stringify(chatResponse);
+        }
       }
-      
+
       const aiMessage = {
         id: Date.now() + 1,
         type: 'ai',
@@ -171,6 +184,13 @@ const TextSelectionPopup = ({ selectedText, onClose }) => {
       setRelatedBlogs(blogs);
       setActiveTab("search");
       setSearchQuery(selectedText + " "); // Reset to selected word + space for next input
+
+      // Record search activity
+      try {
+        await recordActivity('search', null, null, `Searched: ${searchQuery}`);
+      } catch (err) {
+        console.warn('Failed to record search activity:', err);
+      }
     } catch (error) {
       console.error("Error searching:", error);
       toast.error("Search failed");
@@ -208,9 +228,9 @@ const TextSelectionPopup = ({ selectedText, onClose }) => {
       style={{ display: showContent ? 'block' : 'none' }}
     >
       <div
-  className="popup-content fixed bg-navbar-bg border border-navbar-border rounded-xl shadow-2xl w-96 max-w-sm 
+        className="popup-content fixed bg-navbar-bg border border-navbar-border rounded-xl shadow-2xl w-96 max-w-sm 
              top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2"
->
+      >
 
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-navbar-border">
@@ -241,8 +261,8 @@ const TextSelectionPopup = ({ selectedText, onClose }) => {
                   </div>
                 ) : (
                   <p className="text-white italic">
-                    "{simplifyView === "simplified" && simplifiedContent 
-                      ? simplifiedContent.simplifiedContent 
+                    "{simplifyView === "simplified" && simplifiedContent
+                      ? simplifiedContent.simplifiedContent
                       : selectedText}"
                   </p>
                 )}
@@ -256,27 +276,25 @@ const TextSelectionPopup = ({ selectedText, onClose }) => {
               {loadingSimplify ? "Simplifying..." : "Simplify"}
             </button>
           </div>
-          
+
           {/* View Toggle Buttons */}
           {simplifiedContent && !loadingSimplify && (
             <div className="flex space-x-2">
               <button
                 onClick={() => setSimplifyView("original")}
-                className={`px-3 py-1 rounded-lg text-sm font-semibold transition-colors ${
-                  simplifyView === "original"
-                    ? "bg-periwinkle text-rich-black"
-                    : "bg-rich-black text-periwinkle border border-periwinkle hover:bg-periwinkle-light"
-                }`}
+                className={`px-3 py-1 rounded-lg text-sm font-semibold transition-colors ${simplifyView === "original"
+                  ? "bg-periwinkle text-rich-black"
+                  : "bg-rich-black text-periwinkle border border-periwinkle hover:bg-periwinkle-light"
+                  }`}
               >
                 Original
               </button>
               <button
                 onClick={() => setSimplifyView("simplified")}
-                className={`px-3 py-1 rounded-lg text-sm font-semibold transition-colors ${
-                  simplifyView === "simplified"
-                    ? "bg-periwinkle text-rich-black"
-                    : "bg-rich-black text-periwinkle border border-periwinkle hover:bg-periwinkle-light"
-                }`}
+                className={`px-3 py-1 rounded-lg text-sm font-semibold transition-colors ${simplifyView === "simplified"
+                  ? "bg-periwinkle text-rich-black"
+                  : "bg-rich-black text-periwinkle border border-periwinkle hover:bg-periwinkle-light"
+                  }`}
               >
                 Simplified
               </button>
@@ -288,39 +306,36 @@ const TextSelectionPopup = ({ selectedText, onClose }) => {
         <div className="flex border-b border-navbar-border">
           <button
             onClick={() => setActiveTab("meaning")}
-            className={`flex-1 px-4 py-3 text-sm font-semibold transition-colors ${
-              activeTab === "meaning"
-                ? "text-white bg-medium-slate-blue"
-                : "text-periwinkle hover:bg-periwinkle-light"
-            }`}
+            className={`flex-1 px-4 py-3 text-sm font-semibold transition-colors ${activeTab === "meaning"
+              ? "text-white bg-medium-slate-blue"
+              : "text-periwinkle hover:bg-periwinkle-light"
+              }`}
           >
             <div className="flex items-center justify-center space-x-2">
               <span className="material-icons text-lg">book</span>
               <span>Meaning</span>
             </div>
           </button>
-          
+
           <button
             onClick={() => setActiveTab("search")}
-            className={`flex-1 px-4 py-3 text-sm font-semibold transition-colors ${
-              activeTab === "search"
-                ? "text-white bg-medium-slate-blue"
-                : "text-periwinkle hover:bg-periwinkle-light"
-            }`}
+            className={`flex-1 px-4 py-3 text-sm font-semibold transition-colors ${activeTab === "search"
+              ? "text-white bg-medium-slate-blue"
+              : "text-periwinkle hover:bg-periwinkle-light"
+              }`}
           >
             <div className="flex items-center justify-center space-x-2">
               <span className="material-icons text-lg">search</span>
               <span>Search</span>
             </div>
           </button>
-          
+
           <button
             onClick={() => setActiveTab("blogs")}
-            className={`flex-1 px-4 py-3 text-sm font-semibold transition-colors ${
-              activeTab === "blogs"
-                ? "text-white bg-medium-slate-blue"
-                : "text-periwinkle hover:bg-periwinkle-light"
-            }`}
+            className={`flex-1 px-4 py-3 text-sm font-semibold transition-colors ${activeTab === "blogs"
+              ? "text-white bg-medium-slate-blue"
+              : "text-periwinkle hover:bg-periwinkle-light"
+              }`}
           >
             <div className="flex items-center justify-center space-x-2">
               <span className="material-icons text-lg">article</span>
@@ -397,7 +412,7 @@ const TextSelectionPopup = ({ selectedText, onClose }) => {
                   onChange={(e) => {
                     const selectedWord = selectedText.split(" ")[0];
                     const newValue = e.target.value;
-                    
+
                     // Allow free typing, but ensure the input always starts with the selected word
                     if (newValue.trim() === "" || !newValue.toLowerCase().includes(selectedWord.toLowerCase())) {
                       // If empty or doesn't contain selected word, reset to selected word + space
@@ -445,13 +460,41 @@ const TextSelectionPopup = ({ selectedText, onClose }) => {
                           <div className="space-y-2">
                             {(() => {
                               const content = message.content;
-                              const lines = content.split('\n');
+
+                              // Handle structured object content
+                              if (typeof content === 'object' && content !== null) {
+                                return (
+                                  <>
+                                    {content.summary && (
+                                      <div className="text-sm leading-relaxed mb-2 font-medium">
+                                        {content.summary}
+                                      </div>
+                                    )}
+                                    {content.keyPoints && Array.isArray(content.keyPoints) && content.keyPoints.length > 0 && (
+                                      <ul className="space-y-1">
+                                        {content.keyPoints.map((point, idx) => (
+                                          <li key={idx} className="text-sm flex items-start">
+                                            <span className="text-periwinkle mr-2">•</span>
+                                            <span>{point}</span>
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    )}
+                                    {/* Fallback if object but empty props */}
+                                    {!content.summary && !content.keyPoints && (
+                                      <p className="text-sm">{JSON.stringify(content)}</p>
+                                    )}
+                                  </>
+                                );
+                              }
+
+                              const lines = String(content).split('\n');
                               const summaryLines = [];
                               const bulletPoints = [];
-                              
+
                               let inSummary = false;
                               let inBullets = false;
-                              
+
                               for (const line of lines) {
                                 const trimmed = line.trim();
                                 if (trimmed.match(/^\d+\./) && !inSummary && !inBullets) {
@@ -467,7 +510,7 @@ const TextSelectionPopup = ({ selectedText, onClose }) => {
                                   summaryLines.push(trimmed);
                                 }
                               }
-                              
+
                               return (
                                 <>
                                   {summaryLines.length > 0 && (

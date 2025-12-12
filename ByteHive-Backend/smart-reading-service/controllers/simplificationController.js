@@ -1,5 +1,4 @@
-import axios from 'axios';
-import { simplifyContentWithAI, findRelatedBlogs } from '../helpers/aiHelper.js';
+import { simplifyContentWithAI } from '../helpers/aiHelper.js';
 import { Simplification } from '../models/Simplification.js';
 
 export async function simplifyPost(req, res) {

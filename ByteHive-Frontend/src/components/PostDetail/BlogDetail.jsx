@@ -48,13 +48,13 @@ export default function BlogDetail() {
     const fetchPost = async () => {
       const cacheKey = `post_${postId}`;
       const cachedData = localStorage.getItem(cacheKey);
-      
+
       if (cachedData) {
         try {
           const { data, timestamp } = JSON.parse(cachedData);
           const cacheAge = Date.now() - timestamp;
           const cacheExpiry = 30 * 60 * 1000; // 30 minutes in milliseconds
-          
+
           if (cacheAge < cacheExpiry) {
             setPost(data);
             setUpvotes(toCount(data.upvotes));
@@ -108,12 +108,15 @@ export default function BlogDetail() {
         // Record activity for reading this post
         if (auth?.token) {
           try {
+            // Record 'read' for streak/metrics
             await recordActivity('read', postId, null, 'Read a post');
+            // Record 'view' for granular activity history
+            await recordActivity('view', postId, null, 'Viewed a post');
           } catch (error) {
-            console.error("Failed to record read activity:", error);
+            console.error("Failed to record read/view activity:", error);
             // Don't block the UI if streak recording fails
           }
-          // Record view in history
+          // Record view in curation history (for backward compatibility)
           try {
             await recordView(postId);
           } catch (error) {
@@ -204,6 +207,13 @@ export default function BlogDetail() {
       setSimplifiedContent(result);
       setReadingMode("simplify");
       toast.success("Post simplified successfully!");
+
+      // Record simplify activity
+      try {
+        await recordActivity('simplify', postId, null, 'Used simplify feature on a post');
+      } catch (err) {
+        console.warn('Failed to record simplify activity:', err);
+      }
     } catch (error) {
       console.error("Error simplifying post:", error);
       toast.error("Failed to simplify post. Please try again.");
@@ -306,6 +316,15 @@ export default function BlogDetail() {
       }
       if (res && typeof res.userLiked === 'boolean') setIsUpvoted(res.userLiked);
       if (res && typeof res.userDisliked === 'boolean') setIsDownvoted(res.userDisliked);
+
+      // Record downvote activity ONLY if we actually added a downvote (not removed it)
+      if (!previous.isDownvoted && res && typeof res.userDisliked === 'boolean' && res.userDisliked) {
+        try {
+          await recordActivity('downvote', postId, null, 'Downvoted a post');
+        } catch (err) {
+          console.warn('Failed to record downvote activity:', err);
+        }
+      }
     } catch (error) {
       console.error('Dislike API failed:', error);
       setUpvotes(previous.upvotes);
@@ -399,10 +418,9 @@ export default function BlogDetail() {
               <button
                 onClick={handleSimplifyClick}
                 disabled={loadingSimplification}
-                className={`flex items-center space-x-2 px-4 py-2 rounded-md font-lato text-sm font-medium transition-all disabled:opacity-50 ${
-                  readingMode === "simplify"
-                    ? "bg-linear-to-r from-purple-600 to-medium-slate-blue text-white shadow-lg shadow-purple-500/30 border border-purple-400"
-                    : "bg-rich-black-light text-periwinkle hover:bg-periwinkle-light border border-navbar-border hover:border-periwinkle"
+                className={`flex items-center space-x-2 px-4 py-2 rounded-md font-lato text-sm font-medium transition-all disabled:opacity-50 ${readingMode === "simplify"
+                  ? "bg-linear-to-r from-purple-600 to-medium-slate-blue text-white shadow-lg shadow-purple-500/30 border border-purple-400"
+                  : "bg-rich-black-light text-periwinkle hover:bg-periwinkle-light border border-navbar-border hover:border-periwinkle"
                   }`}
               >
                 <span className="material-icons text-lg">
@@ -412,10 +430,9 @@ export default function BlogDetail() {
               </button>
               <button
                 onClick={() => setReadingMode("original")}
-                className={`flex items-center space-x-2 px-4 py-2 rounded-md font-lato text-sm font-medium transition-all ${
-                  readingMode === "original"
-                    ? "bg-linear-to-r from-purple-600 to-medium-slate-blue text-white shadow-lg shadow-purple-500/30 border border-purple-400"
-                    : "bg-rich-black-light text-periwinkle hover:bg-periwinkle-light border border-navbar-border hover:border-periwinkle"
+                className={`flex items-center space-x-2 px-4 py-2 rounded-md font-lato text-sm font-medium transition-all ${readingMode === "original"
+                  ? "bg-linear-to-r from-purple-600 to-medium-slate-blue text-white shadow-lg shadow-purple-500/30 border border-purple-400"
+                  : "bg-rich-black-light text-periwinkle hover:bg-periwinkle-light border border-navbar-border hover:border-periwinkle"
                   }`}
               >
                 <span className="material-icons text-lg">description</span>

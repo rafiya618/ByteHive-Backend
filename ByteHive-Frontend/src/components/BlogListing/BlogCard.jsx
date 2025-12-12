@@ -53,11 +53,9 @@ const BlogCard = ({
         // Try using comment API helper first (axios)
         try {
           const res = await getCommentsByPost(id, null, 'latest');
-          console.log('getCommentsByPost response for', id, res);
           const fetched = res?.data?.comments;
           if (mounted && Array.isArray(fetched)) {
             setLocalCommentsCount(fetched.length);
-            console.log('Fetched comments count for post', id, fetched.length);
             if (fetched.length < 5) return;
           }
         } catch (err) {
@@ -68,10 +66,8 @@ const BlogCard = ({
         try {
           const base = import.meta.env.VITE_COMMENT_SERVICE_URL || 'http://localhost:5002';
           const url = `${base.replace(/\/$/, '')}/comment/all/${id}?limit=1000&sort=latest`;
-          console.log('Fallback fetching comments count from', url);
           const direct = await fetch(url);
           if (!direct.ok) {
-            console.warn('Direct fetch for comments failed:', direct.status);
             return;
           }
           const json = await direct.json();
@@ -143,7 +139,6 @@ const BlogCard = ({
     }
 
     try {
-      console.log('BlogCard: Attempting to save post', { postId: id, category });
       await savePost(id, category);
       setIsBookmarked(true);
       setSavedCategory(category);

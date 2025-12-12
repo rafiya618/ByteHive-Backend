@@ -4,9 +4,6 @@ const API_BASE_URL = 'http://127.0.0.1:5000/api';
 
 // Base API request handler for posts
 const apiRequest = async (url, options = {}) => {
-  console.log('Making API request to:', `${API_BASE_URL}${url}`);
-  console.log('Request options:', options);
-
   try {
     const response = await fetch(`${API_BASE_URL}${url}`, {
       ...options,
@@ -16,18 +13,12 @@ const apiRequest = async (url, options = {}) => {
       }
     });
 
-    console.log('API response status:', response.status);
-    console.log('API response ok:', response.ok);
-
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      console.log('API error data:', errorData);
       throw new Error(errorData.error || errorData.message || `HTTP error! status: ${response.status}`);
     }
 
-    const responseData = await response.json();
-    console.log('API response data:', responseData);
-    return responseData;
+    return await response.json();
   } catch (error) {
     console.error('API request failed:', error);
     throw error;
@@ -71,17 +62,14 @@ const decodeJwtPayload = (token) => {
 const getUserIdFromTokenLocal = () => {
   try {
     const headers = getAuthHeader();
-    console.log('Auth headers:', headers);
     const auth = headers.Authorization || headers.authorization;
     if (!auth) return null;
     const token = auth.split(' ')[1];
-    console.log('JWT token:', token);
     if (!token) return null;
     const payload = decodeJwtPayload(token);
     if (!payload) return null;
     // Common claim names: user_id, _id, id, sub, userId
     const id = payload.user_id ?? payload._id ?? payload.id ?? payload.sub ?? payload.userId;
-    console.log('Decoded user ID from token:', id);
     return id !== undefined && id !== null ? String(id) : null;
   } catch (err) {
     return null;
@@ -92,7 +80,6 @@ export const postsApi = {
   // Test API connection
   testConnection: async () => {
     try {
-      console.log('Testing posts API connection...');
       return await apiRequest('/posts?limit=1');
     } catch (error) {
       console.error('Posts API connection test failed:', error);
@@ -103,7 +90,6 @@ export const postsApi = {
   // Create Post (Protected) - Updated to work with your existing controller
   createPost: async (postData) => {
     const userId = getUserIdFromTokenLocal();
-    console.log('Creating post with user ID:', userId);
 
     // Send data exactly as your Posts controller expects
     const postPayload = {
@@ -117,8 +103,6 @@ export const postsApi = {
       thumbnail: postData.thumbnail || null,
       mediaInputs: postData.mediaInputs || []
     };
-
-    console.log('Final post payload:', postPayload);
 
     return await authenticatedRequest('/posts', {
       method: 'POST',
@@ -160,9 +144,7 @@ export const postsApi = {
   // Get Post by ID (Public) - with proper error handling
   getPostById: async (postId) => {
     try {
-      console.log('Fetching post by ID:', postId);
       const response = await apiRequest(`/posts/${postId}`);
-      console.log('Post API response:', response);
 
       // Ensure the response has the expected structure
       if (response.ok && response.post) {
@@ -240,12 +222,8 @@ export const postsApi = {
     if (searchParams.page) queryParams.append('page', searchParams.page);
     if (searchParams.limit) queryParams.append('limit', searchParams.limit);
 
-    console.log('Searching posts with params:', searchParams);
-    console.log('Query string:', queryParams.toString());
-
     try {
       const response = await apiRequest(`/posts/search/query?${queryParams}`);
-      console.log('Search posts response:', response);
 
       // Backend now handles all relevance scoring, just return the response
       return {
@@ -319,19 +297,15 @@ export const postsApi = {
 
   // Like/Unlike Post (Protected)
   likePost: async (postId, userId) => {
-    console.log('Liking post:', { postId, userId });
-
     try {
       // If caller didn't provide a userId, attempt to extract it from the token
       let processedUserId = userId;
       if (!processedUserId) processedUserId = getUserIdFromTokenLocal();
       if (!processedUserId) {
-        console.error('likePost: no user id available');
         throw new Error('User ID required');
       }
       // Ensure user_id is a string for consistency with backend
       processedUserId = String(processedUserId);
-      console.log('Processed user ID for liking post:', processedUserId);
       return await authenticatedRequest(`/posts/${postId}/like`, {
         method: 'POST',
         body: JSON.stringify({ user_id: processedUserId })
@@ -351,14 +325,11 @@ export const postsApi = {
 
   // Dislike/Remove Dislike Post (Protected)
   dislikePost: async (postId, userId) => {
-    console.log('Disliking post:', { postId, userId });
-
     try {
       // If caller didn't provide a userId, attempt to extract it from the token
       let processedUserId = userId;
       if (!processedUserId) processedUserId = getUserIdFromTokenLocal();
       if (!processedUserId) {
-        console.error('dislikePost: no user id available');
         throw new Error('User ID required');
       }
       // Ensure user_id is a string for consistency with backend
@@ -392,8 +363,6 @@ export const postsApi = {
   // Get Post by ID with vote status (Enhanced)
   getPostByIdWithVotes: async (postId, userId = null) => {
     try {
-      console.log('Fetching post with votes:', { postId, userId });
-
       // Get post details and vote status in parallel
       const [postResponse, voteResponse] = await Promise.all([
         postsApi.getPostById(postId),

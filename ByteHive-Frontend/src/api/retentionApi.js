@@ -82,6 +82,31 @@ export const recordActivity = async (activityType, postId = null, commentId = nu
   }
 };
 
+// Get user's activity history (for History page)
+export const getActivityHistory = async (skip = 0, limit = 50) => {
+  try {
+    const userId = getUserIdFromToken();
+    if (!userId) {
+      console.warn('❌ No user ID found, cannot fetch activity history');
+      return { ok: true, total: 0, activities: [] };
+    }
+
+    console.log('📜 Fetching activity history:', { userId, skip, limit });
+    const response = await api.get(`/activity/history/${userId}`, {
+      params: { skip, limit }
+    });
+    console.log('✅ Activity history fetched:', response.data);
+    return response.data;
+  } catch (error) {
+    console.error('❌ Error fetching activity history:', {
+      message: error.message,
+      status: error.response?.status,
+      data: error.response?.data
+    });
+    return { ok: false, total: 0, activities: [] };
+  }
+};
+
 // Get user streak information
 export const getUserStreak = async (userId = null) => {
   try {
@@ -242,6 +267,7 @@ export const resetStreak = async (userId = null) => {
 // Export object for hooks that use named import { retentionApi }
 export const retentionApi = {
   recordActivity,
+  getActivityHistory,
   getUserStreak,
   getUserBadges,
   getAllBadges,

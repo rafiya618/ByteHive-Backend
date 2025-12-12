@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import socket from '../../../../Socket';
 import { useAuth } from '../../../context/auth';
 import {
@@ -12,21 +12,16 @@ import {
   updateComment
 } from '../../../api/commentApi';
 import { recordActivity } from '../../../api/retentionApi';
-import { jwtDecode } from 'jwt-decode';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import { useProfile } from '../../../context/profileContext';
 import CommentBlock from './CommentBlock';
 import { useLocation } from 'react-router-dom';
-import { useParams } from "react-router-dom";
-import "./comment.css"
-import InputField from '../../../shared/InputField';
+import "./comment.css";
 
 dayjs.extend(relativeTime);
 
 const Comment = ({ postId }) => {
-  // console.log("🔥 postId prop received in Comment component:", postId);
-
   const [msg, setMsg] = useState("");
   const { auth } = useAuth();
   const { profile } = useProfile();
@@ -50,7 +45,6 @@ const Comment = ({ postId }) => {
 
   // ⬅️ added: extract query params
   // let { triggerType, triggerId, entityId, isAggregation } = location.state || {};
-  // console.log('triggerId in comment', triggerId);
   let searchParams = new URLSearchParams(location.search);
   // let triggerType = searchParams.get("triggerType");
   // let entityId = searchParams.get("entityId");
@@ -63,51 +57,23 @@ const Comment = ({ postId }) => {
     const loadComment = async () => {
       try {
         // if (isAggregated) {
-          const { data } = await getcommentById(triggerId);
-          console.log("data in target reply", data);
-          setComments((prev) => {
-            const existingIds = new Set(prev.map((c) => c._id));
-            const uniqueData = [data.comment].filter((c) => !existingIds.has(c._id));
-            return [...prev, ...uniqueData];
-          });
-          if (!data.replies) {
-            console.log('hah')
-          } else {
-            setReplies((prev) => ({ ...prev, [data?.comment?._id]: data.replies }));
-            setExpandReplies((prev) => ({ ...prev, [data?.comment?._id]: true }));
-          }
-          console.log('isAggregated', isAggregated)
-           console.log('data.comment._id', data?.comment._id)
-          if(isAggregated == true){
-            console.log('enter in aggragted true', isAggregated)
-            // console.log('data.comment._id', data?.comment._id)
-            setHighlightId(data?.comment?._id)
-          } 
-          else  if(isAggregated == false) {
-            console.log('enter in aggragted false', isAggregated)
-            setHighlightId(triggerId)
-          }
-          
-
-
-          // if (isAggregation) {
-          //   console.log('triggerId', triggerId)
-          //   triggerId = entityId
-          //   console.log('triggerId', triggerId)
-          // }
-
-        // } else {
-        //   const { data } = await getcommentById(triggerId);
-        //   console.log("data in target comment", data);
-        //   setComments((prev) => {
-        //     const existingIds = new Set(prev.map((c) => c._id));
-        //     const uniqueData = [data.comment].filter((c) => !existingIds.has(c._id));
-        //     return [...prev, ...uniqueData];
-        //   })
-        // }
-        // If it's a reply, load replies
-
-
+        const { data } = await getcommentById(triggerId);
+        setComments((prev) => {
+          const existingIds = new Set(prev.map((c) => c._id));
+          const uniqueData = [data.comment].filter((c) => !existingIds.has(c._id));
+          return [...prev, ...uniqueData];
+        });
+        if (!data.replies) {
+        } else {
+          setReplies((prev) => ({ ...prev, [data?.comment?._id]: data.replies }));
+          setExpandReplies((prev) => ({ ...prev, [data?.comment?._id]: true }));
+        }
+        if (isAggregated == true) {
+          //             setHighlightId(data?.comment?._id)
+        }
+        else if (isAggregated == false) {
+          setHighlightId(triggerId)
+        }
       } catch (err) {
         console.error("Error fetching comment for scroll:", err);
       }
@@ -116,25 +82,24 @@ const Comment = ({ postId }) => {
     loadComment();
   }, [triggerId]);
 
-useEffect(() => {
-  if (!highlightId) return;
+  useEffect(() => {
+    if (!highlightId) return;
 
-  console.log('highlightId: ', highlightId)
-  const scrollAndHighlight = () => {
-    if (targetRef.current) {
-      targetRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
-      targetRef.current.classList.add("highlight");
-      setTimeout(() => {
-        if (targetRef.current) targetRef.current.classList.remove("highlight");
-      }, 3000);
-    }
-  };
+    const scrollAndHighlight = () => {
+      if (targetRef.current) {
+        targetRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+        targetRef.current.classList.add("highlight");
+        setTimeout(() => {
+          if (targetRef.current) targetRef.current.classList.remove("highlight");
+        }, 3000);
+      }
+    };
 
-  // Delay to wait for render to complete
-  const timeout = setTimeout(scrollAndHighlight, 100);
+    // Delay to wait for render to complete
+    const timeout = setTimeout(scrollAndHighlight, 100);
 
-  return () => clearTimeout(timeout);
-}, [highlightId]);
+    return () => clearTimeout(timeout);
+  }, [highlightId]);
 
 
 
@@ -203,7 +168,6 @@ useEffect(() => {
     };
 
     const handleDeleteComment = (comment) => {
-      console.log('🗑️ Comment received in delete socket:', comment);
 
       if (comment.parentId) {
         // Handle reply deletion
@@ -222,16 +186,12 @@ useEffect(() => {
         );
       } else {
         // Handle top-level comment deletion
-        console.log('📂 All parent IDs in replies object:', Object.keys(replies));
 
         const repliesForThisComment = replies[comment._id];
         if (repliesForThisComment && repliesForThisComment.length > 0) {
-          console.log(`💬 Replies for deleted comment ${comment._id}:`);
           repliesForThisComment.forEach((reply, i) => {
-            console.log(` ↳ Reply ${i + 1}:`, reply);
           });
         } else {
-          console.log(`⚠️ No replies found for deleted comment ${comment._id}.`);
         }
 
         setComments(prev => prev.filter(c => c._id !== comment._id));
@@ -279,9 +239,7 @@ useEffect(() => {
 
     const observer = new IntersectionObserver(
       (entries) => {
-        console.log('Observer callback called!');
         if (entries[0].isIntersecting && hasMore && !isLoading) {
-          console.log('The loader is visible!');
           fetchTopComments();
         }
       },
@@ -319,11 +277,9 @@ useEffect(() => {
       entityId: comment ? (comment.parentId ? comment.parentId : comment._id) : postId
     };
 
-    console.log('commentPayload', commentPayload);
 
     try {
       const { data } = await addComment(commentPayload);
-      console.log("Comment submitted:", data);
 
       // Record comment activity for streak
       try {
@@ -382,11 +338,9 @@ useEffect(() => {
   const handleReplies = async (parentId) => {
     try {
       const { data } = await getReplies(postId, parentId);
-      console.log('data', data)
       setReplies(prev => ({ ...prev, [parentId]: data }));
       setReply(prev => ({ ...prev, [parentId]: "" }));
       setExpandReplies(prev => ({ ...prev, [parentId]: true }));
-      console.log('replies: ', data);
     } catch (error) {
       console.log('Error: ', error);
     }
@@ -413,7 +367,6 @@ useEffect(() => {
   const handleUpdateComment = async (commentId) => {
     try {
       const { data } = await updateComment(commentId, editingText[commentId]);
-      console.log('updated comment', data);
       setEditingComment(prev => ({ ...prev, [commentId]: "" }));
       setEditingText(prev => ({ ...prev, [commentId]: "" }));
     } catch (error) {
@@ -424,7 +377,6 @@ useEffect(() => {
   // Delete comment
   const handleDelete = async (commentId, receiverId) => {
     try {
-      console.log('commentId in handle delete', commentId);
       await deleteComment(commentId, receiverId);
     } catch (error) {
       console.log('Error in handle Delete', error);

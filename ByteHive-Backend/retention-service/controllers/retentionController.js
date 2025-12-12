@@ -1,4 +1,5 @@
 import Streak from "../models/streakModel.js";
+import Activity from "../models/activityModel.js";
 import {
   BADGE_DEFINITIONS,
   updateStreakLogic,
@@ -11,46 +12,40 @@ import {
 export const recordActivity = async (req, res) => {
   try {
     const { user_id, activity_type, post_id, comment_id, activity_description } = req.body;
-    console.log('📝 [RETENTION-SERVICE] Request received:', {
-      user_id,
-      activity_type,
-      post_id,
-      comment_id
-    });
 
     if (!user_id || !activity_type) {
-      console.error('❌ [RETENTION-SERVICE] Missing required fields:', { user_id, activity_type });
       return res.status(400).json({
         success: false,
         message: "user_id and activity_type are required"
       });
     }
 
-    const validActivityTypes = ["read", "post", "comment", "like"];
+    const validActivityTypes = ["read", "post", "comment", "like", "view", "downvote", "comment_view", "simplify", "word_meaning", "search"];
     if (!validActivityTypes.includes(activity_type)) {
-      console.error('❌ [RETENTION-SERVICE] Invalid activity_type:', activity_type);
       return res.status(400).json({
         success: false,
         message: `Invalid activity_type. Must be one of: ${validActivityTypes.join(", ")}`
       });
     }
 
-    console.log(`🔄 [RETENTION-SERVICE] Processing streak logic for user: ${user_id}`);
-    const updatedStreakDoc = await updateStreakLogic(user_id, Streak);
-    console.log('✅ [RETENTION-SERVICE] Streak logic updated. Current streak:', updatedStreakDoc.current_streak);
-
-    console.log(`🔄 [RETENTION-SERVICE] Updating behavior metrics for type: ${activity_type}`);
-    const streak = await updateBehaviorMetrics(user_id, activity_type, Streak);
-
-    console.log('✅ [RETENTION-SERVICE] Final State:', {
-      current_streak: streak.current_streak,
-      total_reads: streak.total_reads,
-      total_likes: streak.total_likes
+    // Save to Activity collection for History page
+    await Activity.create({
+      user_id: normalizeUserId(user_id),
+      activity_type,
+      activity_date: new Date(),
+      target_id: post_id || comment_id,
+      target_type: comment_id ? "comment" : "post",
+      post_id,
+      comment_id,
+      activity_description
     });
+
+    const updatedStreakDoc = await updateStreakLogic(user_id, Streak);
+    const streak = await updateBehaviorMetrics(user_id, activity_type, Streak);
 
     const newBadges = getNewlyEarnedBadges(streak.badge_details);
     if (newBadges.length > 0) {
-      console.log('🏆 [RETENTION-SERVICE] New badges earned:', newBadges.map(b => b.badge_name));
+      console.log('🏆 New badges earned:', newBadges.map(b => b.badge_name));
     }
 
     return res.status(200).json({
@@ -72,10 +67,11 @@ export const recordActivity = async (req, res) => {
       }
     });
   } catch (err) {
-    console.error("❌ [RETENTION-SERVICE] Critical Error in recordActivity:", err);
+    console.error("❌ recordActivity error:", err.message);
     return res.status(500).json({ ok: false, error: err.message });
   }
 };
+
 
 export const getUserStreak = async (req, res) => {
   try {

@@ -5,7 +5,7 @@ import Activity from "../models/activityModel.js";
  */
 export const logActivity = async (req, res) => {
   try {
-    const { user_id, activity_type, post_id, comment_id, activity_description } = req.body;
+    const { user_id, activity_type, post_id, comment_id, activity_description, target_id, target_type } = req.body;
 
     // Validate input
     if (!user_id || !activity_type) {
@@ -15,7 +15,7 @@ export const logActivity = async (req, res) => {
       });
     }
 
-    const validActivityTypes = ["read", "post", "comment", "like"];
+    const validActivityTypes = ["read", "post", "comment", "like", "view", "downvote", "comment_view"];
     if (!validActivityTypes.includes(activity_type)) {
       return res.status(400).json({
         ok: false,
@@ -27,6 +27,8 @@ export const logActivity = async (req, res) => {
       user_id,
       activity_type,
       activity_date: new Date(),
+      target_id: target_id || post_id || comment_id,
+      target_type: target_type || (comment_id ? "comment" : "post"),
       post_id,
       comment_id,
       activity_description
@@ -62,12 +64,18 @@ export const getUserActivityHistory = async (req, res) => {
       });
     }
 
-    const activities = await Activity.find({ user_id })
+    // Normalize user_id to string for consistent querying
+    const normalizedUserId = String(user_id);
+    console.log('📜 [ACTIVITY-HISTORY] Fetching history for user:', normalizedUserId, 'skip:', skip, 'limit:', limit);
+
+    const activities = await Activity.find({ user_id: normalizedUserId })
       .sort({ activity_date: -1 })
       .skip(skip)
       .limit(limit);
 
-    const total = await Activity.countDocuments({ user_id });
+    const total = await Activity.countDocuments({ user_id: normalizedUserId });
+
+    console.log('✅ [ACTIVITY-HISTORY] Found', activities.length, 'activities, total:', total);
 
     return res.status(200).json({
       ok: true,
@@ -100,7 +108,7 @@ export const getActivityByType = async (req, res) => {
       });
     }
 
-    const validActivityTypes = ["read", "post", "comment", "like"];
+    const validActivityTypes = ["read", "post", "comment", "like", "view", "downvote", "comment_view"];
     if (!validActivityTypes.includes(activity_type)) {
       return res.status(400).json({
         ok: false,

@@ -1,6 +1,5 @@
 import { useCallback } from 'react';
 import { recordActivity } from '../api/retentionApi';
-import toast from 'react-hot-toast';
 
 export const useRecordStreak = () => {
   const recordActivityAction = useCallback(async (activityType, postId = null, commentId = null, description = null) => {
@@ -18,6 +17,10 @@ export const useRecordStreak = () => {
     return recordActivityAction('read', postId);
   }, [recordActivityAction]);
 
+  const recordView = useCallback((postId) => {
+    return recordActivityAction('view', postId);
+  }, [recordActivityAction]);
+
   const recordPost = useCallback((postId) => {
     return recordActivityAction('post', postId);
   }, [recordActivityAction]);
@@ -30,11 +33,22 @@ export const useRecordStreak = () => {
     return recordActivityAction('like', postId);
   }, [recordActivityAction]);
 
+  const recordDownvote = useCallback((postId) => {
+    return recordActivityAction('downvote', postId);
+  }, [recordActivityAction]);
+
+  const recordCommentView = useCallback((commentId, postId) => {
+    return recordActivityAction('comment_view', postId, commentId);
+  }, [recordActivityAction]);
+
   return {
     recordRead,
+    recordView,
     recordPost,
     recordComment,
     recordLike,
+    recordDownvote,
+    recordCommentView,
     recordActivityAction
   };
 };

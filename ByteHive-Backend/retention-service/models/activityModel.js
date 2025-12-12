@@ -9,7 +9,7 @@ const ActivitySchema = new mongoose.Schema(
     },
     activity_type: {
       type: String,
-      enum: ["read", "post", "comment", "like"],
+      enum: ["read", "post", "comment", "like", "view", "downvote", "comment_view", "simplify", "word_meaning", "search"],
       required: true,
       index: true
     },
@@ -17,6 +17,12 @@ const ActivitySchema = new mongoose.Schema(
       type: Date,
       default: Date.now,
       index: true
+    },
+    target_id: { type: String },
+    target_type: {
+      type: String,
+      enum: ["post", "comment"],
+      default: "post"
     },
     post_id: { type: String },
     comment_id: { type: String },
