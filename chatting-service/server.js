@@ -26,7 +26,7 @@ app.use("/api/rooms", roomRoutes);
 app.use("/api/threads", threadRoutes);
 app.use("/api/messages", messageRoutes);
 
-mongoose.connect("mongodb://localhost:27017/bytehive-chat")
+mongoose.connect("mongodb+srv://rafiamalik787:DXeBg0sPDCEStAhQ@bytehive.xqmy3.mongodb.net/?retryWrites=true&w=majority&appName=ByteHive")
   .then(() => console.log("MongoDB connected"))
   .catch(err => console.log("MongoDB error:", err));
 
