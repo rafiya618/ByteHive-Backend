@@ -26,7 +26,7 @@ app.use("/api/rooms", roomRoutes);
 app.use("/api/threads", threadRoutes);
 app.use("/api/messages", messageRoutes);
 
-mongoose.connect("mongodb+srv://momina:WFbQgzM54N4G4yqT@cluster0.iuqggh8.mongodb.net/bytehive?retryWrites=true&w=majority&appName=Cluster0")
+mongoose.connect("mongodb+srv://rafiamalik787:DXeBg0sPDCEStAhQ@bytehive.xqmy3.mongodb.net/?retryWrites=true&w=majority&appName=ByteHive")
   .then(() => console.log("MongoDB connected"))
   .catch(err => console.log("MongoDB error:", err));
 

@@ -86,7 +86,7 @@ const normalizeCommunityTags = (tags) => {
 // == Create Community 
 export const createCommunity = async (req, res) => {
   try {
-    const { community_name, description, visible, moderation, userId } = req.body;
+    const { community_name, description, visible, moderation, user_id } = req.body;
     const communityTags = normalizeCommunityTags(req.body['community_tags[]'] || req.body.community_tags);
 
     const existingCommunity = await Community.findOne({ community_name });
@@ -97,7 +97,7 @@ export const createCommunity = async (req, res) => {
     const communityData = {
       community_name,
       description,
-      user_id: userId, // Fixed: use user_id for database
+      user_id: user_id, // Fixed: use user_id for database
       community_tags: communityTags,
       visible: visible || 'public',
       moderation: moderation || 'only admin',
@@ -128,6 +128,7 @@ export const createCommunity = async (req, res) => {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
+
 
 // == Update Community
 export const updateCommunity = async (req, res) => {
