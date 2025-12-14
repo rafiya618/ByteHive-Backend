@@ -12,7 +12,7 @@ export default function Navbar() {
   const [streakDropdownOpen, setStreakDropdownOpen] = useState(false);
   const [currentStreak, setCurrentStreak] = useState(0);
   const { profile } = useProfile()
-  const { unReadCount } = useNotifications()
+  const { notifications } = useNotifications()
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -94,8 +94,10 @@ export default function Navbar() {
 
               <button onClick={() => navigate("/notification")} className="text-columbia-blue hover:text-white p-3 rounded-full hover:bg-periwinkle-light transition-colors relative flex items-center justify-center cursor-pointer">
                 <span className="material-icons text-3xl">notifications</span>
-                {unReadCount > 0 && (
-                  <span className="absolute top-1.5 right-1.5 block h-3 w-3 rounded-full bg-medium-slate-blue"></span>
+                {notifications && notifications.length > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-5 h-5 flex items-center justify-center rounded-full bg-red-700 text-white text-xs font-bold px-1">
+                    {notifications.length > 99 ? '99+' : notifications.length}
+                  </span>
                 )}
               </button>
 

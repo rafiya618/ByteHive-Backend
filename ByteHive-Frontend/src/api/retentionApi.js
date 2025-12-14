@@ -140,6 +140,7 @@ export const getUserStreak = async (userId = null) => {
     const streakData = response.data?.streak || response.data;
 
     const result = {
+      user_id: streakData?.user_id,
       current_streak: streakData?.current_streak ?? 0,
       longest_streak: streakData?.longest_streak ?? 0,
       current_level: streakData?.current_level ?? 1,
@@ -149,6 +150,8 @@ export const getUserStreak = async (userId = null) => {
       total_reads: streakData?.total_reads ?? 0,
       total_comments: streakData?.total_comments ?? 0,
       total_likes: streakData?.total_likes ?? 0,
+      streak_expires_at: streakData?.streak_expires_at ?? null,
+      server_time: streakData?.server_time ?? null,
       // Also keep activity_metrics for backwards compatibility
       activity_metrics: {
         total_posts: streakData?.total_posts ?? 0,

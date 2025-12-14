@@ -1,9 +1,10 @@
 import { simplifyContentWithAI } from '../helpers/aiHelper.js';
 import { Simplification } from '../models/Simplification.js';
+import { config } from '../config/env.js';
 
 export async function simplifyPost(req, res) {
   try {
-    const { postId, content, level = 'detailed' } = req.body;
+    const { postId, content, level = 'detailed', forceRefresh = false } = req.body;
     const userId = req.userId;
 
     if (!postId || !content || content.trim().length === 0) {
@@ -13,7 +14,7 @@ export async function simplifyPost(req, res) {
     }
 
     console.log(
-      `✨ Simplifying post ${postId} with level: ${level} by user: ${userId}`
+      `✨ Simplifying post ${postId} with level: ${level} by user: ${userId} (forceRefresh: ${forceRefresh})`
     );
 
     // Check if simplification already exists
@@ -22,7 +23,7 @@ export async function simplifyPost(req, res) {
       simplificationLevel: level,
     });
 
-    if (simplification) {
+    if (simplification && !forceRefresh) {
       console.log('✅ Using cached simplification');
       return res.status(200).json({
         success: true,
@@ -38,12 +39,16 @@ export async function simplifyPost(req, res) {
       });
     }
 
+    if (simplification && forceRefresh) {
+      console.log('🔁 forceRefresh requested - regenerating simplification and overwriting cache');
+    }
+
     console.log('🔄 Generating new simplification with AI');
     const aiResult = await simplifyContentWithAI(content, level);
 
     // Calculate reading times
     const originalWords = content.split(/\s+/).length;
-    const simplifiedWords = aiResult.simplifiedContent.split(/\s+/).length;
+    const simplifiedWords = (aiResult.simplifiedContent || '').split(/\s+/).length;
     const originalReadTime = Math.ceil(originalWords / 200); // avg 200 words per minute
     const simplifiedReadTime = Math.ceil(simplifiedWords / 200);
 
@@ -54,37 +59,40 @@ export async function simplifyPost(req, res) {
     if (avgWordLength < 4) readingLevel = 'beginner';
     if (avgWordLength > 5) readingLevel = 'advanced';
 
-    // Save simplification
-    simplification = new Simplification({
-      postId,
-      originalContent: content,
-      simplifiedContent: aiResult.simplifiedContent,
-      conciseSummary: aiResult.conciseSummary,
-      detailedSummary: aiResult.detailedSummary,
-      keyTakeaways: aiResult.keyTakeaways,
-      readingLevel,
-      originalReadTime,
-      simplifiedReadTime,
-      simplificationLevel: level,
-      createdBy: userId,
-      aiProvider: 'mock',
-      isApproved: true,
-    });
+    // Upsert simplification (create or overwrite)
+    const updated = await Simplification.findOneAndUpdate(
+      { postId, simplificationLevel: level },
+      {
+        $set: {
+          originalContent: content,
+          simplifiedContent: aiResult.simplifiedContent,
+          conciseSummary: aiResult.conciseSummary,
+          detailedSummary: aiResult.detailedSummary,
+          keyTakeaways: aiResult.keyTakeaways,
+          readingLevel,
+          originalReadTime,
+          simplifiedReadTime,
+          createdBy: userId,
+          aiProvider: config.aiProvider || 'mock',
+          isApproved: true,
+        },
+      },
+      { upsert: true, new: true }
+    );
 
-    await simplification.save();
-    console.log('💾 Simplification saved to database');
+    console.log('💾 Simplification saved/updated in database');
 
     res.status(200).json({
       success: true,
       cached: false,
       data: {
-        simplifiedContent: simplification.simplifiedContent,
-        conciseSummary: simplification.conciseSummary,
-        detailedSummary: simplification.detailedSummary,
-        keyTakeaways: simplification.keyTakeaways,
-        readingLevel: simplification.readingLevel,
-        originalReadTime: simplification.originalReadTime,
-        simplifiedReadTime: simplification.simplifiedReadTime,
+        simplifiedContent: updated.simplifiedContent,
+        conciseSummary: updated.conciseSummary,
+        detailedSummary: updated.detailedSummary,
+        keyTakeaways: updated.keyTakeaways,
+        readingLevel: updated.readingLevel,
+        originalReadTime: updated.originalReadTime,
+        simplifiedReadTime: updated.simplifiedReadTime,
       },
     });
   } catch (error) {

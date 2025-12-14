@@ -76,7 +76,12 @@ export async function getMeaningFromAI(word) {
       return await getOpenAIMeaning(word);
     }
 
-    console.log('❌ No AI provider available, returning mock');
+    console.log('❌ All AI providers failed or not configured. Config state:', {
+      aiProvider: config.aiProvider,
+      hasGeminiKey: !!config.geminiApiKey,
+      hasOpenAIKey: !!config.openaiApiKey
+    });
+    // Default mock response
     // Default mock response
     return {
       word,
@@ -132,7 +137,10 @@ async function getGeminiMeaning(word) {
       throw parseError; // Let outer catch handle it
     }
   } catch (error) {
-    console.error('Error calling Gemini API for meaning:', error);
+    console.error('❌ Error calling Gemini API for meaning:', error.message);
+    if (error.status === 403 || error.message.includes('API key')) {
+      console.error('⚠️ POTENTIAL API KEY ISSUE. Please check your GEMINI_API_KEY.');
+    }
     return {
       word,
       definition: `AI-generated definition for ${word}`,
@@ -184,8 +192,10 @@ async function simplifyWithGemini(content, level = 'detailed') {
       "simplifiedContent": "A simplified version using easier words and shorter sentences",
       "conciseSummary": "A brief 1-2 sentence summary",
       "detailedSummary": "A more detailed summary (3-5 sentences)",
-      "keyTakeaways": ["point 1", "point 2", "point 3"]
-    }`;
+      "keyTakeaways": ["Complete and meaningful key point 1 (full sentence)", "Complete and meaningful key point 2 (full sentence)", "Complete and meaningful key point 3 (full sentence)"]
+    }
+    
+    IMPORTANT: For keyTakeaways, provide 3 complete, meaningful, standalone sentences that summarize the main points of the text. Each takeaway should be a full sentence (not fragments or incomplete phrases).`;
 
     // Use jsonModel for better JSON enforcement
     const result = await jsonModel.generateContent(prompt);
@@ -260,11 +270,12 @@ function generateMockDetailedSummary(content) {
 }
 
 function generateMockKeyTakeaways(content) {
-  // Extract key phrases
-  const sentences = content.split('. ');
+  // Extract key phrases - take complete sentences
+  const sentences = content.split('. ').filter(s => s.trim().length > 0);
   return sentences.slice(0, 3).map((s) => {
-    const words = s.split(' ');
-    return words.slice(0, 5).join(' ');
+    // Return complete sentence with proper ending
+    const trimmed = s.trim();
+    return trimmed.endsWith('.') ? trimmed : trimmed + '.';
   });
 }
 

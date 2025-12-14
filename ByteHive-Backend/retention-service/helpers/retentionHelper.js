@@ -49,6 +49,43 @@ export const BADGE_DEFINITIONS = [
     requirement_type: "reads",
     requirement_value: 50,
     description: "Read 50 posts"
+  },
+  // ========== STREAK-BASED BADGES ==========
+  {
+    badge_id: "streak-3-days",
+    badge_name: "3-Day Streak",
+    badge_icon: "🔥",
+    level: 1,
+    requirement_type: "streak",
+    requirement_value: 3,
+    description: "Maintained a 3-day streak"
+  },
+  {
+    badge_id: "streak-7-days",
+    badge_name: "Week Warrior",
+    badge_icon: "⚡",
+    level: 2,
+    requirement_type: "streak",
+    requirement_value: 7,
+    description: "Maintained a 7-day streak"
+  },
+  {
+    badge_id: "streak-14-days",
+    badge_name: "Fortnight Champion",
+    badge_icon: "🏆",
+    level: 3,
+    requirement_type: "streak",
+    requirement_value: 14,
+    description: "Maintained a 14-day streak"
+  },
+  {
+    badge_id: "streak-30-days",
+    badge_name: "Monthly Master",
+    badge_icon: "👑",
+    level: 4,
+    requirement_type: "streak",
+    requirement_value: 30,
+    description: "Maintained a 30-day streak"
   }
 ];
 
@@ -67,6 +104,22 @@ export const normalizeUserId = (userId) => {
 };
 
 // ========== DATE HELPERS ==========
+
+/**
+ * Calculate streak expiry time (End of the current day in UTC)
+ * @param {Date} date - The activity date
+ * @returns {Date} - Expiry date
+ */
+export const calculateStreakExpiry = (date) => {
+  const d = new Date(date);
+  d.setUTCHours(23, 59, 59, 999);
+  // Add 24 hours to cover the *next* day as the valid window?
+  // Usually streak is "do something *tomorrow*".
+  // If I do something today (Day 1), I have until End of Day 2 to keep it.
+  d.setDate(d.getDate() + 1);
+  return d;
+};
+
 /**
  * Check if user has activity today
  */
@@ -114,7 +167,7 @@ export const calculateLevel = (totalPosts, totalReads, totalComments, totalLikes
 
 // ========== BADGE SYSTEM ==========
 /**
- * Check and award new badges based on user behavior (max 5 badges)
+ * Check and award new badges based on user behavior (max 10 badges)
  */
 export const checkAndAwardBadges = (streak) => {
   const { total_posts, total_reads, total_comments, total_likes, badges_earned, badge_details } = streak;
@@ -142,12 +195,15 @@ export const checkAndAwardBadges = (streak) => {
       case "likes":
         earnedThisBadge = total_likes >= badge.requirement_value;
         break;
+      case "streak":
+        earnedThisBadge = streak.current_streak >= badge.requirement_value;
+        break;
       default:
         break;
     }
 
-    // Award badge if max 5 not reached and criteria met
-    if (earnedThisBadge && newBadgesEarned.length < 5) {
+    // Award badge if max 10 not reached and criteria met
+    if (earnedThisBadge && newBadgesEarned.length < 10) {
       newBadgesEarned.push(badge.badge_id);
       newBadgeDetails.push({
         ...badge,
@@ -178,11 +234,9 @@ export const getNewlyEarnedBadges = (badgeDetails) => {
  */
 export const updateBehaviorMetrics = async (user_id, activity_type, Streak) => {
   const normalizedUserId = normalizeUserId(user_id);
-  console.log(`🔍 [Helper] updateBehaviorMetrics - Looking for user_id: ${normalizedUserId} (original: ${user_id}, type: ${typeof user_id})`);
   let streak = await Streak.findOne({ user_id: normalizedUserId });
 
   if (!streak) {
-    console.log(`ℹ️ [Helper] No existing streak found in updateBehaviorMetrics. Creating new.`);
     streak = await Streak.create({
       user_id: normalizedUserId,
       current_level: 1,
@@ -241,12 +295,10 @@ export const updateBehaviorMetrics = async (user_id, activity_type, Streak) => {
  */
 export const updateStreakLogic = async (user_id, Streak) => {
   const normalizedUserId = normalizeUserId(user_id);
-  console.log(`🔍 [Helper] updateStreakLogic called for user: ${normalizedUserId} (original type: ${typeof user_id})`);
   let streak = await Streak.findOne({ user_id: normalizedUserId });
 
   // First time user
   if (!streak) {
-    console.log(`ℹ️ [Helper] No existing streak found. Creating new streak record.`);
     streak = await Streak.create({
       user_id: normalizedUserId,
       current_streak: 1, // Start at 1 immediately
@@ -263,23 +315,40 @@ export const updateStreakLogic = async (user_id, Streak) => {
       total_comments: 0,
       total_likes: 0
     });
-    console.log(`✅ [Helper] New streak created. current_streak: 1`);
     return streak;
   }
 
-  console.log(`ℹ️ [Helper] Existing streak found. Current: ${streak.current_streak}, Last Active: ${streak.last_activity_date}`);
+  const now = new Date();
 
-  // User already has activity today - don't update streak
-  if (hasActivityToday(streak.last_activity_date)) {
-    console.log(`ℹ️ [Helper] User already active today. No streak increment.`);
+  // If streak has expired, reset it
+  // But strictly, if "now" is past "expires_at", it's broken.
+  // Exception: If activity is today, it's valid to extend.
+
+  const isExpired = streak.streak_expires_at && now > streak.streak_expires_at;
+  const isSameDay = hasActivityToday(streak.last_activity_date);
+
+  if (isSameDay) {
+    // Ensure expiry is set correctly even if we don't increment (e.g. recovering state)
+    if (!streak.streak_expires_at) {
+      streak.streak_expires_at = calculateStreakExpiry(now);
+      await streak.save();
+    }
     return streak;
   }
 
-  // User had activity yesterday - increment streak
-  if (hadActivityYesterday(streak.last_activity_date)) {
-    console.log(`ℹ️ [Helper] User active yesterday. Incrementing streak.`);
+  if (isExpired) {
+    streak.current_streak = 1;
+    streak.last_activity_date = now;
+    streak.streak_expires_at = calculateStreakExpiry(now);
+    streak.streak_started_date = now;
+    streak.is_active_today = true;
+    streak.reset_count += 1;
+    streak.total_days_active += 1;
+  } else {
+    // Not expired, and not same day -> Consecutive day
     streak.current_streak += 1;
-    streak.last_activity_date = new Date();
+    streak.last_activity_date = now;
+    streak.streak_expires_at = calculateStreakExpiry(now);
     streak.total_days_active += 1;
     streak.is_active_today = true;
 
@@ -287,15 +356,6 @@ export const updateStreakLogic = async (user_id, Streak) => {
     if (streak.current_streak > streak.longest_streak) {
       streak.longest_streak = streak.current_streak;
     }
-    console.log(`✅ [Helper] Streak incremented to: ${streak.current_streak}`);
-  } else {
-    // User missed a day - reset streak to 1
-    console.log(`⚠️ [Helper] User missed a day. Resetting streak to 1.`);
-    streak.current_streak = 1;
-    streak.last_activity_date = new Date();
-    streak.streak_started_date = new Date();
-    streak.is_active_today = true;
-    streak.reset_count += 1;
   }
 
   await streak.save();

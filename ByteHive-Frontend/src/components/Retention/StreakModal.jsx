@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { getUserStreak, getUserStats, getLeaderboard } from '../../api/retentionApi';
 import LoadingState from '../../shared/LoadingState';
 import toast from 'react-hot-toast';

@@ -46,6 +46,14 @@ const StreakSchema = new mongoose.Schema(
       type: Date,
       default: null
     },
+    streak_expires_at: {
+      type: Date,
+      default: null
+    },
+    timezone: {
+      type: String,
+      default: "UTC"
+    },
     // Behavior tracking
     total_posts: {
       type: Number,
@@ -70,11 +78,11 @@ const StreakSchema = new mongoose.Schema(
       min: 1,
       max: 5
     },
-    // Badges - max 5
+    // Badges - max 10 (5 activity-based + 4 streak-based + future expansion)
     badges_earned: {
       type: [String],
       default: [],
-      maxlength: 5
+      maxlength: 10
     },
     badge_details: [BadgeSchema],
     reset_count: {

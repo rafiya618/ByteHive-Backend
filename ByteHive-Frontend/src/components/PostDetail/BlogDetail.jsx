@@ -522,13 +522,13 @@ export default function BlogDetail() {
                 </div>
               )}
               {readingMode === "simplify" && !loadingSimplification && simplifiedContent && simplifiedContent.keyTakeaways && (
-                <div className="mb-6 p-4 bg-rich-black-light rounded-lg border border-navbar-border">
+                <div className="mb-6 p-4 bg-rich-black-light rounded-lg border border-navbar-border overflow-x-auto">
                   <h3 className="text-periwinkle font-semibold mb-3">Key Takeaways:</h3>
                   <ul className="space-y-2">
                     {simplifiedContent.keyTakeaways.map((takeaway, idx) => (
-                      <li key={idx} className="text-white text-sm flex items-start">
+                      <li key={idx} className="text-white text-sm flex items-center max-w-full wrap-break-word">
                         <span className="text-celadon mr-2 text-lg">•</span>
-                        <span>{takeaway}</span>
+                        <span dangerouslySetInnerHTML={{ __html: takeaway }} />
                       </li>
                     ))}
                   </ul>

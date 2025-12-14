@@ -56,6 +56,7 @@ function getPerTypePreference(prefs, triggerType) {
     eventInvite: "updates.eventInvite",
     system: "system",
     security: "security",
+    streak_warning: "updates.streakReminder",
   };
 
   const path = mapping[triggerType];
@@ -76,7 +77,7 @@ function buildEmailContent(payload) {
   let message = payload.message;
 
   // Use payload.navigate or fallback to homepage
-  const notificationUrl = payload.navigate ;
+  const notificationUrl = payload.navigate;
 
   const body = `
   <div style="background-color:#f9fafb; padding:40px 0; font-family:Arial, Helvetica, sans-serif; color:#333;">
@@ -251,7 +252,7 @@ await sub.subscribe("notification:delete", async (message) => {
     }
 
     console.log('notif.meta.triggerIds', notif.meta.triggerIds)
-    // find which user’s triggerIds contain this commentId
+    // find which user's triggerIds contain this commentId
     let matchedUsername = null;
     for (const [username, trigIds] of notif.meta.triggerIds.entries()) {
       console.log(`👤 User: ${username}, Trigger IDs:`, trigIds);
@@ -279,3 +280,77 @@ await sub.subscribe("notification:delete", async (message) => {
     console.error("❌ Failed to handle notification deletion", error.message);
   }
 });
+
+// ✅ New subscriber for system notifications (preference state changes, etc.)
+await sub.subscribe("system_notification", async (message) => {
+  console.log("\n🔔 [SYSTEM_NOTIFICATION] ==================== NEW MESSAGE ====================");
+
+  try {
+    const payload = JSON.parse(message);
+    console.log("📦 [SYSTEM_NOTIFICATION] Raw payload:", JSON.stringify(payload, null, 2));
+
+    if (!payload.receiverId) {
+      console.error("❌ [SYSTEM_NOTIFICATION] Missing receiverId in payload");
+      return;
+    }
+
+    console.log(`👤 [SYSTEM_NOTIFICATION] Creating notification for user: ${payload.receiverId}`);
+    console.log(`💬 [SYSTEM_NOTIFICATION] Message: "${payload.message}"`);
+
+    // Create in-app notification for system events
+    const notification = await notificationModel.create({
+      receiverId: payload.receiverId,
+      senderId: null, // System notification
+      triggerType: 'system',
+      entityType: 'system',
+      entityId: `system-${Date.now()}-${payload.receiverId}`, // Unique ID
+      message: payload.message,
+      navigate: payload.data?.url || '/notifications',
+      channels: ['in-app'],
+      status: 'unread',
+      meta: {
+        count: 1,
+        lastActors: ['System'],
+        triggerIds: new Map()
+      }
+    });
+
+    console.log("✅ [SYSTEM_NOTIFICATION] Notification created in DB:", notification._id.toString());
+    console.log("📊 [SYSTEM_NOTIFICATION] Notification details:", {
+      receiverId: notification.receiverId,
+      message: notification.message,
+      status: notification.status,
+      createdAt: notification.createdAt
+    });
+
+    // Emit via WebSocket for real-time updates
+    console.log(`🌐 [SYSTEM_NOTIFICATION] Emitting to Socket.IO...`);
+    console.log(`   Event type: notification:new`);
+    console.log(`   Target: forward:event`);
+
+    socket.emit("forward:event", {
+      type: "notification:new",
+      data: {
+        _id: notification._id,
+        receiverId: notification.receiverId,
+        senderId: notification.senderId,
+        triggerType: notification.triggerType,
+        message: notification.message,
+        navigate: notification.navigate,
+        status: notification.status,
+        createdAt: notification.createdAt
+      }
+    });
+
+    console.log("✅ [SYSTEM_NOTIFICATION] WebSocket event emitted successfully");
+    console.log("🔔 [SYSTEM_NOTIFICATION] ==================== END MESSAGE ====================\n");
+
+  } catch (err) {
+    console.error("❌ [SYSTEM_NOTIFICATION] Error:", {
+      message: err.message,
+      stack: err.stack,
+      rawMessage: message
+    });
+  }
+});
+

@@ -66,7 +66,6 @@ export const getUserActivityHistory = async (req, res) => {
 
     // Normalize user_id to string for consistent querying
     const normalizedUserId = String(user_id);
-    console.log('📜 [ACTIVITY-HISTORY] Fetching history for user:', normalizedUserId, 'skip:', skip, 'limit:', limit);
 
     const activities = await Activity.find({ user_id: normalizedUserId })
       .sort({ activity_date: -1 })
@@ -74,8 +73,6 @@ export const getUserActivityHistory = async (req, res) => {
       .limit(limit);
 
     const total = await Activity.countDocuments({ user_id: normalizedUserId });
-
-    console.log('✅ [ACTIVITY-HISTORY] Found', activities.length, 'activities, total:', total);
 
     return res.status(200).json({
       ok: true,

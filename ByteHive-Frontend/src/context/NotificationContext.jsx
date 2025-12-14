@@ -1,6 +1,6 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import { useAuth } from "./auth";
-import { getNotifications, markNotificationAsRead } from "../api/notificationApi";
+import { getNotifications, markNotificationAsRead, deleteNotification } from "../api/notificationApi";
 import socket from "../../Socket";
 import { useLocation } from "react-router-dom";
 
@@ -9,7 +9,7 @@ const NotificationContext = createContext();
 export const NotificationProvider = ({ children }) => {
   const { auth } = useAuth();
   const [notifications, setNotifications] = useState([]);
-  const [unReadCount, setUnReadCount] = useState("");
+  const [unReadCount, setUnReadCount] = useState(0);
   const location = useLocation();
 
   // Join personal room + load existing notifications
@@ -50,7 +50,7 @@ export const NotificationProvider = ({ children }) => {
             setNotifications((prev) =>
               prev.map((n) => ({ ...n, isRead: true }))
             );
-            setUnReadCount("");
+            setUnReadCount(0);
           } catch (err) {
             console.error("Failed to mark as read:", err);
           }
@@ -62,7 +62,7 @@ export const NotificationProvider = ({ children }) => {
 
       console.log("notification", notif);
 
-      
+
     });
 
     // Listen for updated (aggregated) notifications
@@ -86,12 +86,23 @@ export const NotificationProvider = ({ children }) => {
     await markNotificationAsRead(auth?.user?._id);
 
     setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
-    setUnReadCount("");
+    setUnReadCount(0);
+  };
+
+  // Delete notification
+  const deleteNotif = async (notificationId) => {
+    try {
+      await deleteNotification(notificationId);
+      setNotifications((prev) => prev.filter((n) => n._id !== notificationId));
+      setUnReadCount((prev) => Math.max(0, prev - 1));
+    } catch (error) {
+      console.error("Failed to delete notification:", error);
+    }
   };
 
   return (
     <NotificationContext.Provider
-      value={{ notifications, unReadCount, markAllAsRead }}
+      value={{ notifications, unReadCount, markAllAsRead, deleteNotif }}
     >
       {children}
     </NotificationContext.Provider>

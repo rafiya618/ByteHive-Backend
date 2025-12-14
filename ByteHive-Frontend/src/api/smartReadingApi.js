@@ -63,15 +63,16 @@ export async function searchMeanings(query) {
  * @param {string} level - Simplification level: 'concise' or 'detailed'
  * @returns {Promise<Object>} Simplified content, summaries, and key takeaways
  */
-export async function simplifyPost(postId, content, level = 'detailed') {
+export async function simplifyPost(postId, content, level = 'detailed', forceRefresh = false) {
   try {
     console.log(
-      `✨ Simplifying post ${postId} with level: ${level}`
+      `✨ Simplifying post ${postId} with level: ${level} (forceRefresh: ${forceRefresh})`
     );
     const response = await smartReadingClient.post('/simplify', {
       postId,
       content,
       level,
+      forceRefresh,
     });
     console.log('✅ Post simplified successfully');
     return response.data.data;

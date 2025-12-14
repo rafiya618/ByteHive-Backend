@@ -4,8 +4,12 @@ import cors from "cors";
 import connectDB from "./config/db.js";
 import retentionRoutes from "./routes/retentionRoutes.js";
 import activityRoutes from "./routes/activityRoutes.js";
+import initScheduler from "./scheduler.js";
 
 const app = express();
+
+// Initialize Scheduler
+initScheduler();
 
 // Middleware
 app.use(express.json({ limit: "50mb" }));

@@ -3,8 +3,9 @@ import Activity from "../models/activityModel.js";
 import {
   BADGE_DEFINITIONS,
   updateStreakLogic,
-  updateBehaviorMetrics, getNewlyEarnedBadges,
-  normalizeUserId
+  updateBehaviorMetrics, getNewlyEarnedBadges, normalizeUserId,
+  checkAndAwardBadges,
+  calculateStreakExpiry
 } from "../helpers/retentionHelper.js";
 
 // ========== STREAK CONTROLLERS ==========
@@ -45,7 +46,7 @@ export const recordActivity = async (req, res) => {
 
     const newBadges = getNewlyEarnedBadges(streak.badge_details);
     if (newBadges.length > 0) {
-      console.log('🏆 New badges earned:', newBadges.map(b => b.badge_name));
+      // New badges earned - handled by frontend notification
     }
 
     return res.status(200).json({
@@ -63,7 +64,9 @@ export const recordActivity = async (req, res) => {
         total_likes: streak.total_likes,
         badges_earned: streak.badges_earned,
         new_badges: newBadges,
-        reset_count: streak.reset_count
+        reset_count: streak.reset_count,
+        streak_expires_at: streak.streak_expires_at,
+        server_time: new Date()
       }
     });
   } catch (err) {
@@ -82,11 +85,37 @@ export const getUserStreak = async (req, res) => {
     }
 
     const normalizedUserId = normalizeUserId(user_id);
-    console.log(`🔍 [CONTROLLER] getUserStreak - Looking for user_id: ${normalizedUserId}`);
     let streak = await Streak.findOne({ user_id: normalizedUserId });
     if (!streak) {
-      console.log(`ℹ️ [CONTROLLER] No streak found, creating new one`);
       streak = await Streak.create({ user_id: normalizedUserId, current_level: 1, badges_earned: [] });
+    }
+
+    // Retroactive Badge Check: Award pending badges based on stats
+    const { newBadgesEarned, newBadgeDetails } = checkAndAwardBadges(streak);
+
+
+    let needsSave = false;
+
+    if (newBadgesEarned.length > streak.badges_earned.length) {
+      streak.badges_earned = newBadgesEarned;
+      streak.badge_details = newBadgeDetails;
+      needsSave = true;
+    }
+
+    // Self-heal: Fix total_days_active if inconsistent with current_streak
+    if (streak.current_streak > 0 && streak.total_days_active === 0) {
+      streak.total_days_active = streak.current_streak;
+      needsSave = true;
+    }
+
+    // Self-heal: Ensure streak_expires_at is set for existing users
+    if (!streak.streak_expires_at && streak.last_activity_date) {
+      streak.streak_expires_at = calculateStreakExpiry(streak.last_activity_date);
+      needsSave = true;
+    }
+
+    if (needsSave) {
+      await streak.save();
     }
 
     return res.status(200).json({
@@ -105,7 +134,10 @@ export const getUserStreak = async (req, res) => {
         total_comments: streak.total_comments,
         total_likes: streak.total_likes,
         badges_earned: streak.badges_earned,
-        reset_count: streak.reset_count
+        badge_details: streak.badge_details, // ✅ CRITICAL: Frontend needs this!
+        reset_count: streak.reset_count,
+        streak_expires_at: streak.streak_expires_at,
+        server_time: new Date()
       }
     });
   } catch (err) {
@@ -359,5 +391,3 @@ export const getLeaderboard = async (req, res) => {
   }
 
 };
-
-
