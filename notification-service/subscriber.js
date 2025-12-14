@@ -15,13 +15,13 @@ const { sub } = await createRedisClients();
 const socket = io("http://localhost:4000");
 
 const defaultPrefs = {
-  global: { inApp: true, push: false, email: false },
+  global: { inApp: true, push: true, email: false },
   perType: {
     activities: {
-      likePost: { inApp: true, push: false, email: false },
-      likeComment: { inApp: true, push: false, email: false },
-      comment: { inApp: true, push: false, email: false },
-      reply: { inApp: true, push: false, email: false },
+      likePost: { inApp: true, push: true, email: false },
+      likeComment: { inApp: true, push: true, email: false },
+      comment: { inApp: true, push: true, email: false },
+      reply: { inApp: true, push: true, email: false },
       mention: { inApp: true, push: true, email: false }
     },
     network: {
@@ -30,7 +30,7 @@ const defaultPrefs = {
       connectionAccepted: { inApp: true, push: false, email: false }
     },
     updates: {
-      newPost: { inApp: true, push: false, email: false },
+      newPost: { inApp: true, push: true, email: false },
       storyUpdate: { inApp: true, push: false, email: false },
       liveStream: { inApp: true, push: false, email: false },
       eventInvite: { inApp: true, push: false, email: false }

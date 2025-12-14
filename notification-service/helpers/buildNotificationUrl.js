@@ -24,6 +24,9 @@ export function buildNotificationUrl(notification) {
     case "post":
       return `/post/${notification.entityId}`;
 
+    case "likePost":
+      return `/post/${notification.entityId}`;
+
     case "comment":
       return `/post/${notification.postId}?triggerId=${triggerId}&isAggregated=${isAggregated}`;
 

@@ -63,8 +63,8 @@ const processor = async (job) => {
   }
 
   // 3) Mark ready
-  if (post.status !== "ready") {
-    post.status = "ready";
+  if (post.status !== "pending_validation") {
+    post.status = "pending_validation";
     changed = true;
   }
 

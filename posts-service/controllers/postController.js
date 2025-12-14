@@ -29,6 +29,12 @@ export const createPost = async (req, res) => {
       status: "pending"
     });
 
+    await queues.qaJobs.add(
+      "validatePost",
+      { postId: post._id.toString() },
+      { attempts: 3, removeOnComplete: true, removeOnFail: 50 }
+    );
+
     // enqueue worker job
     await queues.postJobs.add(
       "processPost",
@@ -111,6 +117,12 @@ export const updatePost = async (req, res) => {
 
     const hasNewMedia = Array.isArray(req.body.mediaInputs) && req.body.mediaInputs.length > 0;
 
+    await queues.qaJobs.add(
+      "validatePost",
+      { postId: post._id.toString() },
+      { attempts: 3, removeOnComplete: true, removeOnFail: 50 }
+    );
+    
     if (descChanged || hasNewMedia) {
       await queues.postJobs.add(
         "processPost",

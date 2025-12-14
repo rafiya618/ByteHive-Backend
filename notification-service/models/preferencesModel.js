@@ -4,7 +4,7 @@ import mongoose from "mongoose";
 // 🔹 Base notification channel schema
 const channelSchema = new mongoose.Schema({
   inApp:  { type: Boolean, default: true },   // in-app always ON by default
-  push:   { type: Boolean, default: false },
+  push:   { type: Boolean, default: true },
   email:  { type: Boolean, default: false }
 }, { _id: false });
 
@@ -56,7 +56,7 @@ const preferenceSchema = new mongoose.Schema({
   // 🌍 Global settings (apply to all categories)
   global: {
     inApp:  { type: Boolean, default: true, immutable: true }, // cannot disable in-app globally
-    push:   { type: Boolean, default: false },
+    push:   { type: Boolean, default: true },
     email:  { type: Boolean, default: false }
   },
 

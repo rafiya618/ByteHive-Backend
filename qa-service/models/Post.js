@@ -60,8 +60,8 @@ const PostSchema = new mongoose.Schema(
 
     status: {
       type: String,
-      enum: ["pending", "ready", "pending_validation", "failed_validation"],
-      default: "pending_validation"
+      enum: ["pending", "ready", "failed_validation"],
+      default: "pending"
     },
 
     qa: { type: QASchema, default: () => ({}) }   // ✅ merged QA block
