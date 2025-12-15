@@ -4,6 +4,7 @@ import dotenv from "dotenv";
 import connectDB from "./config/db.js";
 import postRoutes from "./routes/postRoutes.js";
 import eventRoutes from "./routes/eventRoutes.js";
+import "./workers/qaWorker.js";
 
 dotenv.config();
 

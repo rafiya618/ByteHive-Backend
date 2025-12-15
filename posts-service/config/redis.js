@@ -9,5 +9,6 @@ export const redisConnection = new IORedis({
 });
 
 export const queues = {
-  postJobs: new Queue("postJobs", { connection: redisConnection })
+  postJobs: new Queue("postJobs", { connection: redisConnection }),
+  qaJobs: new Queue("qaJobs", { connection: redisConnection })
 };
