@@ -10,6 +10,7 @@ import { sendPush } from "./helpers/push.js";
 import { buildNotificationUrl } from "./helpers/buildNotificationUrl.js";
 import { updateAggregation } from "./helpers/aggregateNotification.js"; // ✅ Updated helper
 import { cascadeDeletion } from "./helpers/cascadeDeletion.js";
+import { notificationCopy } from "./helpers/notificationCopy.js";
 
 const { sub } = await createRedisClients();
 const socket = io("http://localhost:4000");
@@ -71,9 +72,18 @@ function getPerTypePreference(prefs, triggerType) {
 
 function buildEmailContent(payload) {
   console.log('payload', payload)
-  let subject = payload.message || "New Notification from ByteHive";
-  let headline = payload.message || "You have a new notification";
-  let message = payload.message;
+
+  const actor = payload?.meta?.lastActors?.[0] || "Someone";
+  const copy = notificationCopy[payload.triggerType];
+
+  const subject =
+    copy?.subject(actor) || "New Notification from ByteHive";
+
+  const headline =
+    copy?.headline(actor) || "You have a new notification";
+
+  const message =
+    copy?.body(actor) || payload.message || "Click below to view the notification.";
 
   // Use payload.navigate or fallback to homepage
   const notificationUrl = payload.navigate ;
@@ -94,7 +104,7 @@ function buildEmailContent(payload) {
         <div style="margin-top:25px; text-align:center;">
           <a href="http://localhost:5173${notificationUrl}" 
              style="background-color:#4F46E5; color:white; padding:10px 20px; border-radius:6px; text-decoration:none; font-weight:bold; display:inline-block;">
-             Click To View
+             View Notification →
           </a>
         </div>
       </div>
@@ -138,7 +148,7 @@ await sub.subscribe("notification:event", async (message) => {
     const { notificationPayload: payload } = JSON.parse(message);
     console.log('payload in notification', payload)
     if (payload.entityType === "security" || payload.entityType === "system") {
-      await sendEmail(payload.receiverEmail, payload.triggerType, payload.message);
+      await sendEmail(payload.receiverEmail, payload.entityType, payload.message);
       return;
     }
 
