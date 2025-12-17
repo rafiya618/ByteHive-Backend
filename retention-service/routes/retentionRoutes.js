@@ -1,6 +1,5 @@
 import express from "express";
 import {
-  recordActivity,
   getUserStreak,
   getAllBadges,
   getUserBadges,
@@ -15,8 +14,8 @@ const router = express.Router();
 
 
 
+
 // Streak endpoints
-router.post("/activity/record", verifyUser, recordActivity);
 router.get("/streak/:user_id", verifyUser, getUserStreak);
 router.post("/streak/reset", verifyUser, resetStreak);
 router.get("/stats/:user_id", verifyUser, getUserStats);

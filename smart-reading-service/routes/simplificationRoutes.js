@@ -1,7 +1,6 @@
 import express from 'express';
 import {
   simplifyPost,
-  getSimplification,
 } from '../controllers/simplificationController.js';
 
 const router = express.Router();
@@ -10,6 +9,6 @@ const router = express.Router();
 router.post('/simplify', simplifyPost);
 
 // GET /smart-reading/simplification?postId=123&level=detailed
-router.get('/simplification', getSimplification);
+// router.get('/simplification', getSimplification);
 
 export default router;
