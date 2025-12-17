@@ -456,15 +456,53 @@ export const getPostVoteStatus = async (req, res) => {
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
-};
-// INCREMENT VIEWS
+}
+// INCREMENT VIEWS - Session-based tracking (one view per user per day)
 export const incrementView = async (req, res) => {
   try {
     const { id } = req.params;
-    const post = await Post.findByIdAndUpdate(id, { $inc: { views: 1 } }, { new: true });
+    const { user_id } = req.body; // Optional - for logged-in users
+
+    // Import ViewTracking model
+    const ViewTracking = (await import('../models/ViewTracking.js')).default;
+
+    // Check if this is a logged-in user
+    if (user_id) {
+      // Check if user has already viewed this post today
+      const hasViewed = await ViewTracking.hasViewedToday(user_id, id);
+
+      if (hasViewed) {
+        // User already viewed today - don't increment
+        const post = await Post.findById(id).select('views');
+        if (!post) return res.status(404).json({ ok: false, error: "Not found" });
+
+        return res.json({
+          ok: true,
+          views: post.views,
+          message: "View already counted for this session"
+        });
+      }
+
+      // Record this view in tracking
+      await ViewTracking.recordView(user_id, id);
+    }
+
+    // Increment view count (for new sessions or anonymous users)
+    const post = await Post.findByIdAndUpdate(
+      id,
+      { $inc: { views: 1 } },
+      { new: true }
+    ).select('views');
+
     if (!post) return res.status(404).json({ ok: false, error: "Not found" });
-    res.json({ ok: true, views: post.views });
+
+    res.json({
+      ok: true,
+      views: post.views,
+      message: user_id ? "View counted" : "Anonymous view counted"
+    });
   } catch (err) {
+    console.error('Increment view error:', err);
     res.status(500).json({ ok: false, error: err.message });
   }
 };

@@ -54,35 +54,18 @@ const StreakSchema = new mongoose.Schema(
       type: String,
       default: "UTC"
     },
-    // Behavior tracking
-    total_posts: {
-      type: Number,
-      default: 0
-    },
-    total_reads: {
-      type: Number,
-      default: 0
-    },
-    total_comments: {
-      type: Number,
-      default: 0
-    },
-    total_likes: {
-      type: Number,
-      default: 0
-    },
-    // Level system based on behavior
+    // Level system based on behavior (calculated from UserActivity)
     current_level: {
       type: Number,
       default: 1,
       min: 1,
       max: 5
     },
-    // Badges - max 10 (5 activity-based + 4 streak-based + future expansion)
+    // Badges - max 5 (Levels 1-5)
     badges_earned: {
       type: [String],
       default: [],
-      maxlength: 10
+      maxlength: 5
     },
     badge_details: [BadgeSchema],
     reset_count: {

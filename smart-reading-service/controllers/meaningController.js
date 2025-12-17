@@ -55,9 +55,31 @@ export async function getMeaning(req, res) {
     });
   } catch (error) {
     console.error('❌ Error in getMeaning:', error);
-    res.status(500).json({
-      error: 'Failed to fetch meaning',
-      message: error.message,
+
+    // Don't save placeholder data - return proper error to user
+    const errorCode = error.code || 'UNKNOWN_ERROR';
+    const errorStatus = error.status || 500;
+
+    // Provide user-friendly error messages based on error type
+    let userMessage = 'Failed to fetch word meaning';
+
+    if (errorCode === 'SERVICE_UNAVAILABLE' || errorStatus === 503) {
+      userMessage = 'AI service is currently overloaded. Please try again in a few moments.';
+    } else if (errorCode === 'QUOTA_EXCEEDED' || errorStatus === 429) {
+      userMessage = 'AI service request limit reached. Please try again later.';
+    } else if (errorCode === 'API_KEY_INVALID' || errorStatus === 403 || errorStatus === 401) {
+      userMessage = 'AI service configuration error. Please contact support.';
+    } else if (errorCode === 'MAX_RETRIES_EXCEEDED') {
+      userMessage = 'Unable to connect to AI service after multiple attempts. Please try again later.';
+    } else {
+      userMessage = `AI service error: ${error.message}`;
+    }
+
+    res.status(errorStatus).json({
+      success: false,
+      error: userMessage,
+      code: errorCode,
+      details: error.message,
     });
   }
 }

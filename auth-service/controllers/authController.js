@@ -5,7 +5,7 @@ import jwt from "jsonwebtoken";
 import OTP from "../models/otpModel.js";
 import profileModel from "../models/profileModel.js";
 import { createRedisClients } from "../../shared-config/redisClient.js";
-import { validateEmail, validatePassword, validateOtp } from "../helpers/validators.js"; // ✅ use shared validators
+import { validateEmail, validatePassword, validateOtp } from "../helpers/validators.js"; // use shared validators
 
 const { pub } = await createRedisClients();
 
