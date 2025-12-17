@@ -1,6 +1,7 @@
 import express from "express";
 import {
   logActivity,
+  removeActivity,
   getUserActivityHistory,
   getActivityByType,
   getActivitySummary,
@@ -14,6 +15,8 @@ const router = express.Router();
 // Activity logging
 router.post("/log", verifyUser, logActivity);
 
+// Remove activity (for vote removals)
+router.post("/remove", verifyUser, removeActivity);
 
 
 // Activity history

@@ -3,89 +3,56 @@
  * Handles streak logic, level calculation, and badge management
  */
 
-// ========== BADGE DEFINITIONS (MAX 5) ==========
+// ========== BADGE DEFINITIONS (MAX 5 - LEVELS 1-5) ==========
+/**
+ * EXACTLY 5 BADGES for Levels 1-5
+ * Each badge represents a milestone of achievement
+ */
 export const BADGE_DEFINITIONS = [
   {
-    badge_id: "novice-reader",
-    badge_name: "Novice Reader",
-    badge_icon: "📖",
+    badge_id: "novice-explorer",
+    badge_name: "Novice Explorer",
+    badge_icon: "menu_book",
     level: 1,
     requirement_type: "reads",
-    requirement_value: 10,
-    description: "Read 10 posts"
+    requirement_value: 5,
+    description: "Read 5 posts - Your journey begins!"
   },
   {
-    badge_id: "content-creator",
-    badge_name: "Content Creator",
-    badge_icon: "✍️",
+    badge_id: "active-contributor",
+    badge_name: "Active Contributor",
+    badge_icon: "create",
     level: 2,
     requirement_type: "posts",
-    requirement_value: 5,
-    description: "Created 5 posts"
+    requirement_value: 3,
+    description: "Created 3 posts - Sharing knowledge"
   },
   {
-    badge_id: "community-voice",
-    badge_name: "Community Voice",
-    badge_icon: "💬",
+    badge_id: "engaged-member",
+    badge_name: "Engaged Member",
+    badge_icon: "chat",
     level: 3,
     requirement_type: "comments",
-    requirement_value: 20,
-    description: "Posted 20 comments"
+    requirement_value: 15,
+    description: "Posted 15 comments - Active in discussions"
   },
   {
-    badge_id: "super-engager",
-    badge_name: "Super Engager",
-    badge_icon: "⚡",
+    badge_id: "community-champion",
+    badge_name: "Community Champion",
+    badge_icon: "flash",
     level: 4,
     requirement_type: "likes",
-    requirement_value: 25,
-    description: "Given 25 likes"
+    requirement_value: 20,
+    description: "Given 20 likes - Supporting the community"
   },
   {
-    badge_id: "master-contributor",
-    badge_name: "Master Contributor",
-    badge_icon: "👑",
+    badge_id: "master-scholar",
+    badge_name: "Master Scholar",
+    badge_icon: "school",
     level: 5,
     requirement_type: "reads",
     requirement_value: 50,
-    description: "Read 50 posts"
-  },
-  // ========== STREAK-BASED BADGES ==========
-  {
-    badge_id: "streak-3-days",
-    badge_name: "3-Day Streak",
-    badge_icon: "🔥",
-    level: 1,
-    requirement_type: "streak",
-    requirement_value: 3,
-    description: "Maintained a 3-day streak"
-  },
-  {
-    badge_id: "streak-7-days",
-    badge_name: "Week Warrior",
-    badge_icon: "⚡",
-    level: 2,
-    requirement_type: "streak",
-    requirement_value: 7,
-    description: "Maintained a 7-day streak"
-  },
-  {
-    badge_id: "streak-14-days",
-    badge_name: "Fortnight Champion",
-    badge_icon: "🏆",
-    level: 3,
-    requirement_type: "streak",
-    requirement_value: 14,
-    description: "Maintained a 14-day streak"
-  },
-  {
-    badge_id: "streak-30-days",
-    badge_name: "Monthly Master",
-    badge_icon: "👑",
-    level: 4,
-    requirement_type: "streak",
-    requirement_value: 30,
-    description: "Maintained a 30-day streak"
+    description: "Read 50 posts - True dedication to learning"
   }
 ];
 
@@ -151,23 +118,29 @@ export const hadActivityYesterday = (lastActivityDate) => {
 
 // ========== LEVEL SYSTEM ==========
 /**
- * Calculate user level based on behavior metrics (1-5)
- * Score = (posts × 3) + (comments × 2) + (reads × 1) + (likes × 0.5)
- * LIKES ARE INCLUDED in the formula to reward all engagement
+ * Calculate user level based on badges earned (1-5)
+ * Single source of truth: Badge count determines level
+ * 
+ * @param {Array} badgesEarned - Array of badge IDs the user has earned
+ * @returns {Number} - User level (1-5)
+ * 
+ * Level Mapping:
+ * - 0 badges → Level 1 (starter)
+ * - 1 badge  → Level 2
+ * - 2 badges → Level 3
+ * - 3 badges → Level 4
+ * - 4 badges → Level 5
+ * - 5 badges → Level 5 (max)
  */
-export const calculateLevel = (totalPosts, totalReads, totalComments, totalLikes = 0) => {
-  const activityScore = (totalPosts * 3) + (totalReads * 1) + (totalComments * 2) + (totalLikes * 0.5);
-
-  if (activityScore >= 100) return 5;
-  if (activityScore >= 60) return 4;
-  if (activityScore >= 30) return 3;
-  if (activityScore >= 10) return 2;
-  return 1;
+export const calculateLevelFromBadges = (badgesEarned) => {
+  const badgeCount = badgesEarned?.length || 0;
+  return Math.min(badgeCount + 1, 5); // 0 badges = level 1, 5 badges = level 5
 };
 
 // ========== BADGE SYSTEM ==========
 /**
- * Check and award new badges based on user behavior (max 10 badges)
+ * Check and award new badges based on user behavior (max 5 badges)
+ * UPDATED: Maximum 5 badges per user (Levels 1-5)
  */
 export const checkAndAwardBadges = (streak) => {
   const { total_posts, total_reads, total_comments, total_likes, badges_earned, badge_details } = streak;
@@ -202,8 +175,8 @@ export const checkAndAwardBadges = (streak) => {
         break;
     }
 
-    // Award badge if max 10 not reached and criteria met
-    if (earnedThisBadge && newBadgesEarned.length < 10) {
+    // Award badge if max 5 not reached and criteria met
+    if (earnedThisBadge && newBadgesEarned.length < 5) {
       newBadgesEarned.push(badge.badge_id);
       newBadgeDetails.push({
         ...badge,
@@ -231,6 +204,7 @@ export const getNewlyEarnedBadges = (badgeDetails) => {
 // ========== STREAK LOGIC ==========
 /**
  * Update behavior metrics and check for new badges
+ * NOW: Calculates from UserActivity (single source of truth)
  */
 export const updateBehaviorMetrics = async (user_id, activity_type, Streak) => {
   const normalizedUserId = normalizeUserId(user_id);
@@ -242,48 +216,41 @@ export const updateBehaviorMetrics = async (user_id, activity_type, Streak) => {
       current_level: 1,
       badges_earned: [],
       badge_details: [],
-      total_posts: activity_type === "post" ? 1 : 0,
-      total_reads: activity_type === "read" ? 1 : 0,
-      total_comments: activity_type === "comment" ? 1 : 0,
-      total_likes: activity_type === "like" ? 1 : 0,
       is_active_today: true,
       current_streak: 1,
       longest_streak: 1,
       total_days_active: 1
     });
-  } else {
-    // Increment activity counter based on type
-    switch (activity_type) {
-      case "post":
-        streak.total_posts += 1;
-        break;
-      case "read":
-        streak.total_reads += 1;
-        break;
-      case "comment":
-        streak.total_comments += 1;
-        break;
-      case "like":
-        streak.total_likes += 1;
-        break;
-      default:
-        break;
+  }
+
+  // ✅ Get REAL metrics from UserActivity
+  const UserActivity = (await import('../models/activityModel.js')).default;
+  const userActivity = await UserActivity.findOne({ user_id: normalizedUserId });
+
+  if (userActivity) {
+    const metrics = {
+      total_posts: 0, // Not tracked in UserActivity
+      total_reads: userActivity.read_posts?.length || 0,
+      total_comments: userActivity.commented_posts?.length || 0,
+      total_likes: (userActivity.upvoted_posts?.length || 0) + (userActivity.downvoted_posts?.length || 0)
+    };
+
+    // Check for new badges using REAL metrics FIRST
+    const streakWithMetrics = { ...streak.toObject(), ...metrics };
+    const { newBadgesEarned, newBadgeDetails } = checkAndAwardBadges(streakWithMetrics);
+
+    // Merge new badges with existing
+    const existingBadgeIds = new Set(streak.badges_earned);
+    const badgesToAdd = newBadgesEarned.filter(id => !existingBadgeIds.has(id));
+
+    if (badgesToAdd.length > 0) {
+      streak.badges_earned = [...streak.badges_earned, ...badgesToAdd];
+      const newDetails = newBadgeDetails.filter(b => badgesToAdd.includes(b.badge_id));
+      streak.badge_details = [...streak.badge_details, ...newDetails];
     }
 
-    // Recalculate level based on new metrics (INCLUDING likes)
-    streak.current_level = calculateLevel(
-      streak.total_posts,
-      streak.total_reads,
-      streak.total_comments,
-      streak.total_likes
-    );
-
-    // Check for new badges
-    const { newBadgesEarned, newBadgeDetails } = checkAndAwardBadges(streak);
-    if (newBadgesEarned.length > streak.badges_earned.length) {
-      streak.badges_earned = newBadgesEarned;
-      streak.badge_details = newBadgeDetails;
-    }
+    // ✅ Calculate level based on badge count (single source of truth)
+    streak.current_level = calculateLevelFromBadges(streak.badges_earned);
   }
 
   await streak.save();

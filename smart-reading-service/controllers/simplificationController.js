@@ -1,149 +1,88 @@
 import { simplifyContentWithAI } from '../helpers/aiHelper.js';
-import { Simplification } from '../models/Simplification.js';
-import { config } from '../config/env.js';
 
-export async function simplifyPost(req, res) {
+// Helper function for validation
+const isValidSimplificationLevel = (level) => {
+  const validLevels = ['summarize', 'key_takeaways', 'concise_summary', 'detailed_summary'];
+  return validLevels.includes(level);
+};
+
+export const simplifyPost = async (req, res) => {
   try {
-    const { postId, content, level = 'detailed', forceRefresh = false } = req.body;
-    const userId = req.userId;
+    const { postId, content, simplificationLevel = 'detailed_summary' } = req.body;
 
-    if (!postId || !content || content.trim().length === 0) {
-      return res
-        .status(400)
-        .json({ error: 'postId and content are required' });
-    }
+    console.log(`✨ Simplifying post ${postId} with level: ${simplificationLevel} by user: ${req.user?.id}`);
 
-    console.log(
-      `✨ Simplifying post ${postId} with level: ${level} by user: ${userId} (forceRefresh: ${forceRefresh})`
-    );
-
-    // Check if simplification already exists
-    let simplification = await Simplification.findOne({
-      postId,
-      simplificationLevel: level,
-    });
-
-    if (simplification && !forceRefresh) {
-      console.log('✅ Using cached simplification');
-      return res.status(200).json({
-        success: true,
-        cached: true,
-        data: {
-          simplifiedContent: simplification.simplifiedContent,
-          conciseSummary: simplification.conciseSummary,
-          detailedSummary: simplification.detailedSummary,
-          keyTakeaways: simplification.keyTakeaways,
-          readingLevel: simplification.readingLevel,
-          simplifiedReadTime: simplification.simplifiedReadTime,
-        },
+    // Validate input
+    if (!content || !postId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields: postId and content'
       });
     }
 
-    if (simplification && forceRefresh) {
-      console.log('🔁 forceRefresh requested - regenerating simplification and overwriting cache');
+    // Validate simplification level
+    if (!isValidSimplificationLevel(simplificationLevel)) {
+      return res.status(400).json({
+        success: false,
+        error: `Invalid simplification level: "${simplificationLevel}". Must be one of: summarize, key_takeaways, concise_summary, detailed_summary`
+      });
     }
 
-    console.log('🔄 Generating new simplification with AI');
-    const aiResult = await simplifyContentWithAI(content, level);
+    console.log('📋 Requested level:', simplificationLevel);
 
-    // Calculate reading times
-    const originalWords = content.split(/\s+/).length;
-    const simplifiedWords = (aiResult.simplifiedContent || '').split(/\s+/).length;
-    const originalReadTime = Math.ceil(originalWords / 200); // avg 200 words per minute
-    const simplifiedReadTime = Math.ceil(simplifiedWords / 200);
+    // Always generate fresh simplification (no caching)
+    console.log('🔄 Generating fresh simplification with AI');
+    const simplifiedData = await simplifyContentWithAI(content, simplificationLevel);
 
-    // Determine reading level based on average word length
-    const avgWordLength =
-      simplifiedWords > 0 ? simplifiedWords / content.length : 0;
-    let readingLevel = 'intermediate';
-    if (avgWordLength < 4) readingLevel = 'beginner';
-    if (avgWordLength > 5) readingLevel = 'advanced';
-
-    // Upsert simplification (create or overwrite)
-    const updated = await Simplification.findOneAndUpdate(
-      { postId, simplificationLevel: level },
-      {
-        $set: {
-          originalContent: content,
-          simplifiedContent: aiResult.simplifiedContent,
-          conciseSummary: aiResult.conciseSummary,
-          detailedSummary: aiResult.detailedSummary,
-          keyTakeaways: aiResult.keyTakeaways,
-          readingLevel,
-          originalReadTime,
-          simplifiedReadTime,
-          createdBy: userId,
-          aiProvider: config.aiProvider || 'mock',
-          isApproved: true,
-        },
-      },
-      { upsert: true, new: true }
-    );
-
-    console.log('💾 Simplification saved/updated in database');
-
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
-      cached: false,
-      data: {
-        simplifiedContent: updated.simplifiedContent,
-        conciseSummary: updated.conciseSummary,
-        detailedSummary: updated.detailedSummary,
-        keyTakeaways: updated.keyTakeaways,
-        readingLevel: updated.readingLevel,
-        originalReadTime: updated.originalReadTime,
-        simplifiedReadTime: updated.simplifiedReadTime,
-      },
+      message: 'Post simplified successfully',
+      data: simplifiedData
     });
   } catch (error) {
     console.error('❌ Error in simplifyPost:', error);
-    res.status(500).json({
-      error: 'Failed to simplify post',
-      message: error.message,
-    });
-  }
-}
 
-export async function getSimplification(req, res) {
-  try {
-    const { postId, level = 'detailed' } = req.query;
-
-    if (!postId) {
-      return res.status(400).json({ error: 'postId is required' });
-    }
-
-    console.log(`📖 Fetching simplification for post: ${postId}`);
-
-    const simplification = await Simplification.findOne({
-      postId,
-      simplificationLevel: level,
-      isApproved: true,
-    });
-
-    if (!simplification) {
-      return res.status(404).json({
+    // Handle specific error codes from AI helper
+    if (error.code === 'SERVICE_UNAVAILABLE') {
+      return res.status(503).json({
         success: false,
-        message: 'Simplification not found',
+        error: error.message || 'AI service is temporarily unavailable. Please try again in a few moments.',
+        code: error.code,
+        retryAfter: 60 // Suggest retry after 60 seconds
       });
     }
 
-    res.status(200).json({
-      success: true,
-      data: {
-        simplifiedContent: simplification.simplifiedContent,
-        conciseSummary: simplification.conciseSummary,
-        detailedSummary: simplification.detailedSummary,
-        keyTakeaways: simplification.keyTakeaways,
-        readingLevel: simplification.readingLevel,
-        originalReadTime: simplification.originalReadTime,
-        simplifiedReadTime: simplification.simplifiedReadTime,
-      },
-    });
-  } catch (error) {
-    console.error('❌ Error in getSimplification:', error);
-    res.status(500).json({
-      error: 'Failed to fetch simplification',
-      message: error.message,
+    if (error.code === 'QUOTA_EXCEEDED') {
+      return res.status(429).json({
+        success: false,
+        error: error.message || 'AI service quota exceeded. Please try again later.',
+        code: error.code,
+        retryAfter: 300 // Suggest retry after 5 minutes
+      });
+    }
+
+    if (error.code === 'API_KEY_INVALID') {
+      return res.status(503).json({
+        success: false,
+        error: 'AI service is temporarily unavailable. Please try again later.',
+        code: 'SERVICE_UNAVAILABLE', // Don't expose internal API key issues to frontend
+        details: 'Service configuration error'
+      });
+    }
+
+    if (error.code === 'AI_PROCESSING_ERROR' || error.code === 'MAX_RETRIES_EXCEEDED') {
+      return res.status(500).json({
+        success: false,
+        error: error.message || 'Failed to process your request. Please try again.',
+        code: error.code
+      });
+    }
+
+    // Generic error fallback
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to simplify post. Please try again.',
+      details: error.message
     });
   }
-}
+};

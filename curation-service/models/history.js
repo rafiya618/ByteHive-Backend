@@ -1,5 +1,14 @@
 import mongoose from 'mongoose';
 
+/**
+ * History Schema - Tracks user's post viewing history
+ * 
+ * UPDATED: Day-based history tracking
+ * - viewedDate: Calendar date (start of day in UTC) for grouping by day
+ * - lastAccessed: Most recent view timestamp within that day
+ * - Allows multiple entries for same post across different days
+ * - Prevents duplicate entries within the same day
+ */
 const historySchema = new mongoose.Schema({
   userId: {
     type: String,
@@ -10,28 +19,36 @@ const historySchema = new mongoose.Schema({
     type: String,
     required: true
   },
-  viewedAt: {
+  viewedDate: {
+    type: Date,
+    required: true,
+    index: true,
+    // Stores the calendar date (YYYY-MM-DD at 00:00:00 UTC)
+  },
+  firstViewed: {
     type: Date,
     default: Date.now
+  },
+  lastAccessed: {
+    type: Date,
+    default: Date.now
+  },
+  viewCount: {
+    type: Number,
+    default: 1
   }
 }, {
   timestamps: true
 });
 
-// Compound index for efficient queries
-historySchema.index({ userId: 1, viewedAt: -1 });
+// Compound index for efficient queries (sorted by most recent day, then by most recent access within day)
+historySchema.index({ userId: 1, viewedDate: -1, lastAccessed: -1 });
 
-// Ensure unique views within a time window (e.g., don't record multiple views of the same post within 1 hour)
+// UNIQUE constraint: One history record per user per post PER DAY
+// This allows the same post to have multiple entries across different days
 historySchema.index(
-  { userId: 1, postId: 1, viewedAt: 1 },
-  { 
-    unique: true, 
-    partialFilterExpression: {
-      viewedAt: { 
-        $gt: new Date(Date.now() - 3600000) // 1 hour
-      }
-    }
-  }
+  { userId: 1, postId: 1, viewedDate: 1 },
+  { unique: true }
 );
 
 export default mongoose.model('History', historySchema);
