@@ -11,7 +11,8 @@ import {
   addModerator,
   removeModerator,
   getUserCommunities,
-  getAllCommunities
+  getAllCommunities,
+  getCommunityLite
 } from '../controllers/communityController.js';
 import { upload } from '../config/cloudinary.js';
 import { addPostToCommunity, removePostFromCommunity } from '../controllers/communityController.js';
@@ -22,6 +23,7 @@ const router = express.Router();
 router.get('/discover', discoverCommunities);
 router.get('/all', getAllCommunities);
 router.get('/user/:userId', getUserCommunities);
+router.get('/:communityId/lite', getCommunityLite);
 router.get('/:communityId', getCommunityDetails);
 
 // Community CRUD

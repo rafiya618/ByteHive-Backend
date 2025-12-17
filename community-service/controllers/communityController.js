@@ -689,3 +689,15 @@ export const getCommunityPosts = async (req, res) => {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
+
+// == LITE: minimal community data for RE-service (community_tags)
+export const getCommunityLite = async (req, res) => {
+  try {
+    const { communityId } = req.params;
+    const doc = await Community.findById(communityId).select("community_tags");
+    if (!doc) return res.status(404).json({ ok: false, error: "Community not found" });
+    return res.json({ ok: true, community: { _id: doc._id, community_tags: doc.community_tags || [] } });
+  } catch (error) {
+    return res.status(500).json({ ok: false, error: error.message });
+  }
+};

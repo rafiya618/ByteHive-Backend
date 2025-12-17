@@ -468,3 +468,52 @@ export const incrementView = async (req, res) => {
     res.status(500).json({ ok: false, error: err.message });
   }
 };
+
+// == LITE: minimal post data for RE-service (tags, community, createdAt)
+export const getPostLite = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const doc = await Post.findById(id).select("tags community createdAt date");
+    if (!doc) return res.status(404).json({ ok: false, error: "Post not found" });
+    return res.json({
+      ok: true,
+      post: {
+        _id: doc._id,
+        tags: Array.isArray(doc.tags) ? doc.tags : [],
+        community: doc.community || null,
+        createdAt: doc.createdAt || doc.date || null,
+      },
+    });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: err.message });
+  }
+};
+
+// == CANDIDATES: filter by tags and/or community, minimal fields for ranking
+export const getPostCandidates = async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit || "50", 10), 500);
+    const skip = parseInt(req.query.skip || "0", 10);
+    const tagsParam = String(req.query.tags || "").trim();
+    const community = String(req.query.community || "").trim();
+
+    const or = [];
+    if (tagsParam) {
+      const tags = tagsParam.split(",").map(s => s.trim()).filter(Boolean);
+      if (tags.length) or.push({ tags: { $in: tags } });
+    }
+    if (community) or.push({ community });
+
+    const query = or.length ? { $or: or } : {};
+
+    const posts = await Post.find(query)
+      .select("post_title tags community createdAt date")
+      .sort({ date: -1 })
+      .skip(skip)
+      .limit(limit);
+
+    return res.json({ ok: true, count: posts.length, posts });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: err.message });
+  }
+};
