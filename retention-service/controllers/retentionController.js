@@ -1,80 +1,11 @@
 import Streak from "../models/streakModel.js";
-import Activity from "../models/activityModel.js";
 import {
-  BADGE_DEFINITIONS,
-  updateStreakLogic,
-  updateBehaviorMetrics, getNewlyEarnedBadges, normalizeUserId,
+  BADGE_DEFINITIONS, normalizeUserId,
   checkAndAwardBadges,
   calculateStreakExpiry
 } from "../helpers/retentionHelper.js";
 
 // ========== STREAK CONTROLLERS ==========
-
-export const recordActivity = async (req, res) => {
-  try {
-    const { user_id, activity_type, post_id, comment_id, activity_description } = req.body;
-
-    if (!user_id || !activity_type) {
-      return res.status(400).json({
-        success: false,
-        message: "user_id and activity_type are required"
-      });
-    }
-
-    const validActivityTypes = ["read", "post", "comment", "like", "view", "downvote", "comment_view", "simplify", "word_meaning", "search"];
-    if (!validActivityTypes.includes(activity_type)) {
-      return res.status(400).json({
-        success: false,
-        message: `Invalid activity_type. Must be one of: ${validActivityTypes.join(", ")}`
-      });
-    }
-
-    // Save to Activity collection for History page
-    await Activity.create({
-      user_id: normalizeUserId(user_id),
-      activity_type,
-      activity_date: new Date(),
-      target_id: post_id || comment_id,
-      target_type: comment_id ? "comment" : "post",
-      post_id,
-      comment_id,
-      activity_description
-    });
-
-    const updatedStreakDoc = await updateStreakLogic(user_id, Streak);
-    const streak = await updateBehaviorMetrics(user_id, activity_type, Streak);
-
-    const newBadges = getNewlyEarnedBadges(streak.badge_details);
-    if (newBadges.length > 0) {
-      // New badges earned - handled by frontend notification
-    }
-
-    return res.status(200).json({
-      ok: true,
-      message: "Activity recorded successfully",
-      streak: {
-        current_streak: streak.current_streak,
-        longest_streak: streak.longest_streak,
-        total_days_active: streak.total_days_active,
-        is_active_today: streak.is_active_today,
-        current_level: streak.current_level,
-        total_posts: streak.total_posts,
-        total_reads: streak.total_reads,
-        total_comments: streak.total_comments,
-        total_likes: streak.total_likes,
-        badges_earned: streak.badges_earned,
-        new_badges: newBadges,
-        reset_count: streak.reset_count,
-        streak_expires_at: streak.streak_expires_at,
-        server_time: new Date()
-      }
-    });
-  } catch (err) {
-    console.error("❌ recordActivity error:", err.message);
-    return res.status(500).json({ ok: false, error: err.message });
-  }
-};
-
 
 export const getUserStreak = async (req, res) => {
   try {
@@ -118,6 +49,20 @@ export const getUserStreak = async (req, res) => {
       await streak.save();
     }
 
+    // ✅ Calculate metrics from UserActivity (unique blog counts)
+    const UserActivity = (await import('../models/activityModel.js')).default;
+    const userActivity = await UserActivity.findOne({ user_id: normalizedUserId });
+
+    const activityMetrics = {
+      total_posts: 0, // Not tracked in UserActivity - use Streak value
+      total_reads: userActivity?.read_posts?.length || 0, // Unique blogs read
+      total_comments: userActivity?.commented_posts?.length || 0, // Unique blogs commented
+      total_likes: (userActivity?.upvoted_posts?.length || 0) + (userActivity?.downvoted_posts?.length || 0) // Upvotes + Downvotes
+    };
+
+    // ✅ Level is calculated from badge count in updateBehaviorMetrics
+    // No manual recalculation needed - trust the stored value
+
     return res.status(200).json({
       ok: true,
       streak: {
@@ -129,10 +74,10 @@ export const getUserStreak = async (req, res) => {
         streak_started_date: streak.streak_started_date,
         is_active_today: streak.is_active_today,
         current_level: streak.current_level,
-        total_posts: streak.total_posts,
-        total_reads: streak.total_reads,
-        total_comments: streak.total_comments,
-        total_likes: streak.total_likes,
+        total_posts: activityMetrics.total_posts,
+        total_reads: activityMetrics.total_reads,
+        total_comments: activityMetrics.total_comments,
+        total_likes: activityMetrics.total_likes,
         badges_earned: streak.badges_earned,
         badge_details: streak.badge_details, // ✅ CRITICAL: Frontend needs this!
         reset_count: streak.reset_count,

@@ -9,5 +9,7 @@ export const config = {
   aiProvider: 'gemini',
   openaiApiKey: process.env.OPENAI_API_KEY || '',
   huggingfaceApiKey: process.env.HUGGINGFACE_API_KEY || '',
-  geminiApiKey: process.env.GEMINI_API_KEY || 'AIzaSyB6Km_XuHSZuNnlPjhfk8NuwfLXl4DE6FA',
+  geminiApiKey: process.env.GEMINI_API_KEY,
+  // Cache configuration - toggle caching of AI simplification responses
+  enableSimplificationCache: process.env.ENABLE_SIMPLIFICATION_CACHE === 'true',
 };

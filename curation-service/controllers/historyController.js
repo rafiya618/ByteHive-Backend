@@ -1,44 +1,81 @@
 import History from '../models/history.js';
 
-// Record a post view
+/**
+ * Record a post view
+ * UPDATED: Day-based deduplication logic
+ * - Same day, same post: Updates lastAccessed and increments viewCount
+ * - Different day, same post: Creates new history entry
+ * - viewedDate is the calendar date (start of day in UTC)
+ */
 const recordView = async (req, res, next) => {
   try {
     const { postId, userId } = req.body;
 
-    const history = new History({
-      userId,
-      postId
-    });
+    // Calculate viewedDate as start of current day in UTC
+    const now = new Date();
+    const viewedDate = new Date(Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      now.getUTCDate(),
+      0, 0, 0, 0
+    ));
 
-    await history.save();
-    res.status(201).json({ message: 'View recorded successfully', history });
+    // Upsert: Update existing entry for this day, or create new
+    const history = await History.findOneAndUpdate(
+      { userId, postId, viewedDate }, // Find by user, post, AND date
+      {
+        $set: {
+          lastAccessed: new Date()
+        },
+        $inc: {
+          viewCount: 1
+        },
+        $setOnInsert: {
+          firstViewed: new Date(),
+          viewedDate: viewedDate
+        }
+      },
+      {
+        upsert: true, // Create if doesn't exist
+        new: true, // Return updated document
+        runValidators: true
+      }
+    );
+
+    res.status(201).json({
+      message: history.viewCount === 1 ? 'View recorded successfully' : 'View updated successfully',
+      history
+    });
   } catch (error) {
-    // If error is due to duplicate view within time window, just return success
-    if (error.code === 11000) {
-      return res.json({ message: 'View already recorded' });
-    }
+    console.error('Error recording view:', error);
     res.status(500).json({ message: 'Error recording view', error: error.message });
   }
 };
 
-// Get user's view history
+/**
+ * Get user's view history
+ * UPDATED: Sorts by viewedDate (most recent day first), then by lastAccessed (most recent time within day)
+ */
 const getHistory = async (req, res) => {
   try {
     const { userId, page = 1, limit = 10 } = req.query;
 
     const history = await History.find({ userId })
-      .sort({ viewedAt: -1 })
+      .sort({ viewedDate: -1, lastAccessed: -1 }) // Sort by most recent day, then most recent access within day
       .skip((page - 1) * limit)
-      .limit(limit);
+      .limit(parseInt(limit));
 
     const total = await History.countDocuments({ userId });
 
     res.json({
-      history,
+      success: true,
+      data: history,
       totalPages: Math.ceil(total / limit),
-      currentPage: page
+      currentPage: parseInt(page),
+      total
     });
   } catch (error) {
+    console.error('Error fetching history:', error);
     res.status(500).json({ message: 'Error fetching history', error: error.message });
   }
 };

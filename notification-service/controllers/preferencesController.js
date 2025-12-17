@@ -136,12 +136,12 @@ export const updatePreferences = async (req, res) => {
 
         // Publish system notification
         const message = isEnabled
-          ? "🔥 Streak reminders enabled! We'll keep you posted."
-          : "🔕 Streak reminders disabled. You won't receive warnings.";
+          ? " Streak reminders enabled! We'll keep you posted."
+          : " Streak reminders disabled. You won't receive warnings.";
 
         console.log("\n📢 [PREFERENCES] ==================== PUBLISHING SYSTEM NOTIFICATION ====================");
         console.log(`👤 [PREFERENCES] User: ${userId}`);
-        console.log(`⚙️  [PREFERENCES] Action: ${isEnabled ? 'ENABLED' : 'DISABLED'} streak reminders`);
+        console.log(`  [PREFERENCES] Action: ${isEnabled ? 'ENABLED' : 'DISABLED'} streak reminders`);
         console.log(`💬 [PREFERENCES] Message: "${message}"`);
 
         const payload = {
