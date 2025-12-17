@@ -5,7 +5,7 @@
 
 import { MongoClient } from 'mongodb';
 
-const MONGODB_URI = 'mongodb+srv://momina:WFbQgzM54N4G4yqT@cluster0.iuqggh8.mongodb.net/bytehive?retryWrites=true&w=majority&appName=Cluster0';
+const MONGODB_URI = 'mongodb+srv://rafiamalik787:DXeBg0sPDCEStAhQ@bytehive.xqmy3.mongodb.net/?retryWrites=true&w=majority&appName=ByteHive';
 
 async function checkDatabase() {
     const client = new MongoClient(MONGODB_URI);
