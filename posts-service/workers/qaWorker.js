@@ -33,9 +33,9 @@ const processor = async (job) => {
   let final_status;
 
   if (relevantEnough && passedQuality && hasNoViolations) {
-    final_status = "ready";
+    final_status = "approved"; // all good
   } else {
-    final_status = "failed_validation"; // low quality or violations
+    final_status = "rejected"; // low quality or violations
 
   }
 
@@ -51,7 +51,7 @@ const processor = async (job) => {
 
   await post.save();
 
-  const passed = final_status === "ready";
+  const passed = final_status === "approved";
   return { postId, passed };
 };
 

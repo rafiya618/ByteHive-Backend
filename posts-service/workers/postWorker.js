@@ -62,9 +62,9 @@ const processor = async (job) => {
     changed = true;
   }
 
-  // 3) Mark ready
-  if (post.status !== "ready") {
-    post.status = "ready";
+  // 3) Mark approved if not already
+  if (post.status !== "approved") {
+    post.status = "approved";
     changed = true;
   }
 
