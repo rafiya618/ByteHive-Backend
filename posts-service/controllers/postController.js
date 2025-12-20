@@ -26,7 +26,7 @@ export const createPost = async (req, res) => {
       user_id,
       thumbnail: thumbnail || null,
       media: { inputs: Array.isArray(mediaInputs) ? mediaInputs : [] },
-      status: "pending"
+      status: "pending_review"
     });
 
     await queues.qaJobs.add(
@@ -102,7 +102,7 @@ export const updatePost = async (req, res) => {
     const update = { ...req.body };
     if (Array.isArray(req.body.mediaInputs)) {
       update["media.inputs"] = req.body.mediaInputs;
-      update.status = "pending";
+      update.status = "pending_review";
     }
 
     const before = await Post.findById(id).select("post_description");

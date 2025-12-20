@@ -20,7 +20,8 @@ Rules:
    - Provide a "quality_score" between 0.0 and 1.0
    - Do not assign 0 automatically for slightly irrelevant posts.
 3. Detect policy violations: NSFW, hate speech, violence, spam.
-4. Provide actionable suggestions to fix policy violations, improve relevance and quality.
+4. Tell the reasons for low relevance or quality.
+5. Provide actionable suggestions to fix policy violations, improve relevance and quality.
 
 Return ONLY a valid JSON object with the structure:
 {
@@ -33,6 +34,7 @@ Return ONLY a valid JSON object with the structure:
     "spam": boolean
   },
   "quality_score": number,
+  "reasons": [ "string" ],
   "suggestions": [ "string" ]
 }
 Do NOT include any explanation outside JSON.
@@ -41,7 +43,7 @@ Do NOT include any explanation outside JSON.
     const response = await axios.post(
       "https://openrouter.ai/api/v1/chat/completions",
       {
-        model: "amazon/nova-2-lite-v1:free",
+        model: "allenai/olmo-3.1-32b-think:free",
         messages: [
           {
             role: "user",
