@@ -1,5 +1,6 @@
 import Post from "../models/Post.js";
 import { queues } from "../config/redis.js";
+import axios from "axios";
 
 // CREATE — fast, enqueue heavy work
 export const createPost = async (req, res) => {
@@ -41,6 +42,26 @@ export const createPost = async (req, res) => {
       { postId: post._id.toString() },
       { attempts: 3, removeOnComplete: true, removeOnFail: 50 }
     );
+
+    // Log post creation activity for badge tracking (non-blocking)
+    try {
+      const retentionUrl = process.env.RETENTION_SERVICE_URL || 'http://localhost:5005';
+      await axios.post(
+        `${retentionUrl}/api/activity/log`,
+        {
+          user_id,
+          activity_type: 'post',
+          post_id: post._id.toString()
+        },
+        { 
+          headers: { Authorization: req.headers.authorization },
+          timeout: 5000 
+        }
+      );
+      console.log('[POST] Post activity logged for badge tracking');
+    } catch (activityError) {
+      console.warn('[POST] Failed to log post activity (non-blocking):', activityError.message);
+    }
 
     return res.status(201).json({
       ok: true,

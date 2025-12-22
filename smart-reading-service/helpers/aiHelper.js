@@ -1,5 +1,6 @@
 import { config } from '../config/env.js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import OpenAI from 'openai';
 
 // Initialize Gemini AI
 const genAI = new GoogleGenerativeAI(config.geminiApiKey);
@@ -13,6 +14,18 @@ const jsonModel = genAI.getGenerativeModel({
     maxOutputTokens: 16384 // Increased to prevent truncation
   }
 });
+
+// Initialize OpenRouter as fallback (using OpenAI SDK with OpenRouter base URL)
+const openrouter = new OpenAI({
+  baseURL: "https://openrouter.ai/api/v1",
+  apiKey: process.env.OPENROUTER_API_KEY || ''
+});
+const OPENROUTER_MODEL = "google/gemma-3-4b-it:free";
+
+// Log AI configuration on startup
+console.log('🤖 [AI-CONFIG] Smart Reading Service AI Configuration:');
+console.log(`   ├─ Primary: Gemini (${config.geminiApiKey ? '✅ API Key Set' : '❌ No API Key'})`);
+console.log(`   └─ Fallback: OpenRouter (${process.env.OPENROUTER_API_KEY ? '✅ API Key Set' : '❌ No API Key'})`);
 
 // Helper to clean JSON string from Markdown formatting
 function cleanJsonString(text) {
@@ -39,10 +52,10 @@ function fixIncompleteJson(text) {
       }
       try {
         JSON.parse(fixed);
-        console.log('✅ Fixed incomplete JSON by adding closing quote and brace');
+        console.log('Fixed incomplete JSON by adding closing quote and brace');
         return fixed;
       } catch (e) {
-        console.log('❌ Could not fix incomplete JSON');
+        console.log('Could not fix incomplete JSON');
         throw error; // Re-throw original error
       }
     }
@@ -51,23 +64,23 @@ function fixIncompleteJson(text) {
 }
 
 export async function getMeaningFromAI(word) {
-  console.log('📖 getMeaningFromAI called for word:', word);
-  console.log('🔍 Config check:', { aiProvider: config.aiProvider, hasGeminiKey: !!config.geminiApiKey });
+  console.log(' getMeaningFromAI called for word:', word);
+  console.log('Config check:', { aiProvider: config.aiProvider, hasGeminiKey: !!config.geminiApiKey });
 
   // ALWAYS use Gemini AI - Single Source of Truth
   if (config.aiProvider === 'gemini' && config.geminiApiKey) {
-    console.log('🤖 Using Gemini AI for meaning...');
+    console.log(' Using Gemini AI for meaning...');
     return await getGeminiMeaning(word);
   }
 
   // If using other AI providers
   if (config.aiProvider === 'openai' && config.openaiApiKey) {
-    console.log('🤖 Using OpenAI for meaning...');
+    console.log('Using OpenAI for meaning...');
     return await getOpenAIMeaning(word);
   }
 
   // No AI provider configured - throw error
-  console.log('❌ No AI provider configured. Config state:', {
+  console.log(' No AI provider configured. Config state:', {
     aiProvider: config.aiProvider,
     hasGeminiKey: !!config.geminiApiKey,
     hasOpenAIKey: !!config.openaiApiKey
@@ -91,92 +104,64 @@ async function getGeminiMeaning(word) {
       "antonyms": ["antonym1", "antonym2"]
     }`;
 
-  // Retry logic for API calls
-  const maxRetries = 3;
-  let attempt = 0;
+  try {
+    console.log(` [AI-MEANING] Requesting meaning for: ${word} via Gemini`);
 
-  while (attempt < maxRetries) {
-    attempt++;
+    const result = await jsonModel.generateContent(prompt);
+    const response = await result.response;
+    const text = response.text();
 
-    try {
-      console.log(`📤 [AI-MEANING] Attempt ${attempt}/${maxRetries} - Requesting meaning for: ${word}`);
-
-      // Use jsonModel for better JSON enforcement
-      const result = await jsonModel.generateContent(prompt);
-      const response = await result.response;
-      const text = response.text();
-
-      console.log('📥 [AI-MEANING] Response from Gemini:', text);
-
-      // Try to parse JSON response with cleaning
-      try {
-        const parsed = JSON.parse(cleanJsonString(text));
-        // Basic validation/fallback
-        return {
-          word: parsed.word || word,
-          definition: parsed.definition || `Definition for ${word}`,
-          pronunciation: parsed.pronunciation || `/${word}/`,
-          partOfSpeech: parsed.partOfSpeech || 'noun',
-          examples: parsed.examples || [`Example with ${word}`],
-          synonyms: parsed.synonyms || [],
-          antonyms: parsed.antonyms || [],
-        };
-      } catch (parseError) {
-        console.warn(`Failed to parse Gemini response as JSON (Attempt ${attempt})`);
-        if (attempt === maxRetries) {
-          throw parseError;
-        }
-        await sleep(500);
-        continue;
-      }
-    } catch (error) {
-      const errorStatus = error.status || error.response?.status;
-      const errorMessage = error.message || '';
-
-      console.error(`❌ [AI-MEANING] Error on attempt ${attempt}/${maxRetries}:`, errorMessage);
-
-      // Handle retryable errors
-      if ((errorStatus === 503 || errorStatus === 502 || errorStatus === 429 ||
-        errorMessage.includes('overloaded') || errorMessage.includes('unavailable'))
-        && attempt < maxRetries) {
-        const backoffDelay = Math.min(1000 * Math.pow(2, attempt - 1), 10000);
-        console.warn(`⚠️ [AI-MEANING] Retrying in ${backoffDelay}ms...`);
-        await sleep(backoffDelay);
-        continue;
-      }
-
-      // API key issues
-      if (errorStatus === 403 || errorStatus === 401 || errorMessage.includes('API key')) {
-        console.error('⚠️ POTENTIAL API KEY ISSUE. Please check your GEMINI_API_KEY.');
-        const apiKeyError = new Error('AI service authentication failed. Please check your GEMINI_API_KEY configuration.');
-        apiKeyError.code = 'API_KEY_INVALID';
-        apiKeyError.status = 403;
-        throw apiKeyError;
-      }
-
-      // If all retries failed or non-retryable error, throw the error
-      console.error(`❌ [AI-MEANING] All retries exhausted for: ${word}`);
-      const meaningError = new Error(`Failed to generate meaning for "${word}": ${errorMessage}`);
-      meaningError.code = error.code || 'AI_PROCESSING_ERROR';
-      meaningError.status = errorStatus || 500;
-      throw meaningError;
-    }
+    console.log(`✅ [AI-MEANING] SUCCESS via Gemini for: "${word}"`);
+    return {
+      word: parsed.word || word,
+      definition: parsed.definition || `Definition for ${word}`,
+      pronunciation: parsed.pronunciation || `/${word}/`,
+      partOfSpeech: parsed.partOfSpeech || 'noun',
+      examples: parsed.examples || [`Example with ${word}`],
+      synonyms: parsed.synonyms || [],
+      antonyms: parsed.antonyms || [],
+      _provider: 'gemini' // Track which provider was used
+    };
+  } catch (error) {
+    console.error(`❌ [AI-MEANING] Gemini FAILED for "${word}":`, error.message);
+    console.log('🔄 [AI-MEANING] Falling back to OpenRouter...');
+    
+    // Fallback to OpenRouter
+    return await getOpenRouterMeaning(word, prompt);
   }
-
-  // Fallback if somehow we exit the loop without success
-  const fallbackError = new Error(`Failed to generate meaning for "${word}" after ${maxRetries} attempts`);
-  fallbackError.code = 'MAX_RETRIES_EXCEEDED';
-  fallbackError.status = 500;
-  throw fallbackError;
 }
 
-async function getOpenAIMeaning(word) {
-  // Placeholder for OpenAI integration
-  console.log('🔄 OpenAI integration placeholder for:', word);
-  return mockMeanings[word.toLowerCase()] || {
-    word,
-    definition: `AI-generated definition for ${word}`,
-  };
+// OpenRouter fallback for word meaning
+async function getOpenRouterMeaning(word, prompt) {
+  try {
+    console.log(`🔄 [AI-MEANING] Using OpenRouter (${OPENROUTER_MODEL}) for: "${word}"`);
+    
+    const completion = await openrouter.chat.completions.create({
+      model: OPENROUTER_MODEL,
+      messages: [{ role: "user", content: prompt }]
+    });
+
+    const text = completion.choices[0]?.message?.content || '{}';
+    console.log(`✅ [AI-MEANING] SUCCESS via OpenRouter for: "${word}"`);
+
+    const parsed = JSON.parse(cleanJsonString(text));
+    return {
+      word: parsed.word || word,
+      definition: parsed.definition || `Definition for ${word}`,
+      pronunciation: parsed.pronunciation || `/${word}/`,
+      partOfSpeech: parsed.partOfSpeech || 'noun',
+      examples: parsed.examples || [`Example with ${word}`],
+      synonyms: parsed.synonyms || [],
+      antonyms: parsed.antonyms || [],
+      _provider: 'openrouter' // Track which provider was used
+    };
+  } catch (fallbackError) {
+    console.error(`❌ [AI-MEANING] OpenRouter FAILED for "${word}":`, fallbackError.message);
+    const meaningError = new Error(`Failed to generate meaning for "${word}" - both Gemini and OpenRouter failed`);
+    meaningError.code = 'AI_PROCESSING_ERROR';
+    meaningError.status = 500;
+    throw meaningError;
+  }
 }
 
 export async function simplifyContentWithAI(content, level = 'detailed') {
@@ -189,7 +174,7 @@ export async function simplifyContentWithAI(content, level = 'detailed') {
   }
 
   // Fallback if no AI provider configured
-  console.warn('⚠️ No AI provider configured or API keys missing');
+  console.warn(' No AI provider configured or API keys missing');
   const errorMsg = 'AI Configuration Error: No provider available (Check API Keys)';
 
   if (level === 'summarize') return { summarize: errorMsg };
@@ -315,151 +300,81 @@ ${content}
     expectedFields = ['detailedSummary'];
   }
 
-  // ========== API RETRY LOGIC WITH EXPONENTIAL BACKOFF ==========
-  const maxApiRetries = 5; // Maximum number of API call retries
-  const maxParseRetries = 3; // Maximum retries for JSON parsing errors
-  let apiAttempt = 0;
+  // ========== SINGLE ATTEMPT + OPENROUTER FALLBACK ==========
+  try {
+    console.log(`📤 [AI-SIMPLIFY] Generating ${level} with Gemini`);
 
-  while (apiAttempt < maxApiRetries) {
-    apiAttempt++;
+    const result = await jsonModel.generateContent(prompt);
+    const response = await result.response;
+    const text = response.text();
 
-    try {
-      console.log(`📤 [AI-SIMPLIFY] API Call ${apiAttempt}/${maxApiRetries} - Generating ${level} with Gemini`);
+    console.log(`📥 [AI-SIMPLIFY] RAW RESPONSE (Length: ${text.length}):\n${text.substring(0, 200)}...`);
 
-      // Retry logic for JSON parsing errors within each API call
-      let parseAttempt = 0;
+    const cleanedText = cleanJsonString(text);
+    const fixedText = fixIncompleteJson(cleanedText);
+    const parsed = JSON.parse(fixedText);
 
-      while (parseAttempt < maxParseRetries) {
-        parseAttempt++;
-
-        try {
-          console.log(`  📋 [AI-SIMPLIFY] Parse Attempt ${parseAttempt}/${maxParseRetries}`);
-
-          // Use jsonModel for better JSON enforcement
-          const result = await jsonModel.generateContent(prompt);
-          const response = await result.response;
-          const text = response.text();
-
-          console.log(`📥 [AI-SIMPLIFY] RAW RESPONSE (Length: ${text.length}):\n${text.substring(0, 200)}...`);
-
-          const cleanedText = cleanJsonString(text);
-          const fixedText = fixIncompleteJson(cleanedText);
-          const parsed = JSON.parse(fixedText);
-
-          // Validate expected fields exist
-          const hasAllFields = expectedFields.every(field => parsed[field]);
-          if (!hasAllFields) {
-            console.warn(`⚠️ Missing expected fields for ${level}:`, expectedFields);
-          }
-
-          // Return ONLY the expected fields for this type
-          const resultData = {};
-          expectedFields.forEach(field => {
-            resultData[field] = parsed[field] || null;
-          });
-
-          console.log(`✅ [AI-SIMPLIFY] Successfully generated ${level} (API attempt ${apiAttempt}, Parse attempt ${parseAttempt})`);
-          return resultData;
-
-        } catch (parseError) {
-          console.error(`❌ [AI-SIMPLIFY] JSON Parse Error (Parse Attempt ${parseAttempt}/${maxParseRetries}):`, parseError.message);
-
-          if (parseAttempt === maxParseRetries) {
-            // If we've exhausted parse retries, throw to trigger API retry
-            throw parseError;
-          }
-          // Small delay before parse retry
-          await sleep(500);
-        }
-      }
-
-    } catch (error) {
-      const errorMessage = error.message || '';
-      const errorStatus = error.status || error.response?.status;
-
-      console.error(`❌ [AI-SIMPLIFY] Error on API attempt ${apiAttempt}/${maxApiRetries}:`, errorMessage);
-      console.error(`   Status: ${errorStatus}, Full error:`, error);
-
-      // ========== HANDLE RETRYABLE ERRORS WITH EXPONENTIAL BACKOFF ==========
-
-      // 503 Service Unavailable - Model overloaded (RETRYABLE)
-      if (errorStatus === 503 || errorMessage.includes('overloaded') || errorMessage.includes('Service Unavailable')) {
-        if (apiAttempt < maxApiRetries) {
-          const backoffDelay = Math.min(1000 * Math.pow(2, apiAttempt - 1), 30000); // Cap at 30 seconds
-          console.warn(`⚠️ [AI-SIMPLIFY] Service overloaded (503). Retrying in ${backoffDelay}ms (attempt ${apiAttempt + 1}/${maxApiRetries})...`);
-          await sleep(backoffDelay);
-          continue; // Retry the API call
-        } else {
-          // Exhausted all retries for 503
-          const serviceError = new Error('AI service is currently overloaded. We tried multiple times but the service is busy. Please try again in a few minutes.');
-          serviceError.code = 'SERVICE_UNAVAILABLE';
-          serviceError.status = 503;
-          throw serviceError;
-        }
-      }
-
-      // 429 Rate Limit / Quota Exceeded (RETRYABLE with longer backoff)
-      if (errorStatus === 429 || errorMessage.includes('quota') || errorMessage.includes('Too Many Requests')) {
-        if (apiAttempt < maxApiRetries) {
-          const backoffDelay = Math.min(2000 * Math.pow(2, apiAttempt - 1), 60000); // Cap at 60 seconds, longer delays
-          console.warn(`⚠️ [AI-SIMPLIFY] Rate limit exceeded (429). Retrying in ${backoffDelay}ms (attempt ${apiAttempt + 1}/${maxApiRetries})...`);
-          await sleep(backoffDelay);
-          continue; // Retry the API call
-        } else {
-          // Exhausted all retries for 429
-          const quotaError = new Error('AI service quota exceeded. Please try again later or contact support to upgrade your plan.');
-          quotaError.code = 'QUOTA_EXCEEDED';
-          quotaError.status = 429;
-          throw quotaError;
-        }
-      }
-
-      // 502 Bad Gateway (RETRYABLE - temporary server issue)
-      if (errorStatus === 502 || errorMessage.includes('Bad Gateway')) {
-        if (apiAttempt < maxApiRetries) {
-          const backoffDelay = Math.min(1000 * Math.pow(2, apiAttempt - 1), 30000);
-          console.warn(`⚠️ [AI-SIMPLIFY] Bad Gateway (502). Retrying in ${backoffDelay}ms (attempt ${apiAttempt + 1}/${maxApiRetries})...`);
-          await sleep(backoffDelay);
-          continue; // Retry the API call
-        } else {
-          const serviceError = new Error('AI service is temporarily unavailable (Bad Gateway). Please try again in a few moments.');
-          serviceError.code = 'SERVICE_UNAVAILABLE';
-          serviceError.status = 502;
-          throw serviceError;
-        }
-      }
-
-      // ========== HANDLE NON-RETRYABLE ERRORS ==========
-
-      // 401/403 API Key Issues (NON-RETRYABLE - no point retrying with same bad key)
-      if (errorStatus === 403 || errorStatus === 401 || errorMessage.includes('API key')) {
-        const apiKeyError = new Error('AI service authentication failed. Please check API configuration.');
-        apiKeyError.code = 'API_KEY_INVALID';
-        apiKeyError.status = 403;
-        throw apiKeyError;
-      }
-
-      // Generic/Unknown errors - still retry a few times in case it's transient
-      if (apiAttempt < maxApiRetries) {
-        const backoffDelay = Math.min(1000 * Math.pow(2, apiAttempt - 1), 20000);
-        console.warn(`⚠️ [AI-SIMPLIFY] Unknown error. Retrying in ${backoffDelay}ms (attempt ${apiAttempt + 1}/${maxApiRetries})...`);
-        await sleep(backoffDelay);
-        continue; // Retry the API call
-      } else {
-        // Exhausted all retries for unknown error
-        const genericError = new Error(`Failed to generate AI content after ${maxApiRetries} attempts: ${errorMessage}`);
-        genericError.code = 'AI_PROCESSING_ERROR';
-        genericError.status = 500;
-        throw genericError;
-      }
+    // Validate expected fields exist
+    const hasAllFields = expectedFields.every(field => parsed[field]);
+    if (!hasAllFields) {
+      console.warn(`Missing expected fields for ${level}:`, expectedFields);
     }
-  }
 
-  // This should never be reached, but just in case
-  const fallbackError = new Error('Failed to simplify content after maximum retries');
-  fallbackError.code = 'MAX_RETRIES_EXCEEDED';
-  fallbackError.status = 500;
-  throw fallbackError;
+    // Return ONLY the expected fields for this type
+    const resultData = {};
+    expectedFields.forEach(field => {
+      resultData[field] = parsed[field] || null;
+    });
+
+    console.log(`✅ [AI-SIMPLIFY] SUCCESS via Gemini for: ${level}`);
+    resultData._provider = 'gemini'; // Track which provider was used
+    return resultData;
+
+  } catch (error) {
+    console.error(`❌ [AI-SIMPLIFY] Gemini FAILED for ${level}:`, error.message);
+    console.log('🔄 [AI-SIMPLIFY] Falling back to OpenRouter...');
+    
+    // Fallback to OpenRouter
+    return await simplifyWithOpenRouter(content, level, prompt, expectedFields);
+  }
+}
+
+// OpenRouter fallback for content simplification
+async function simplifyWithOpenRouter(content, level, prompt, expectedFields) {
+  try {
+    console.log(`[AI-SIMPLIFY] Using OpenRouter (${OPENROUTER_MODEL}) for: ${level}`);
+    
+    const completion = await openrouter.chat.completions.create({
+      model: OPENROUTER_MODEL,
+      messages: [{ role: "user", content: prompt }]
+    });
+
+    const text = completion.choices[0]?.message?.content || '{}';
+    console.log(`[AI-SIMPLIFY] SUCCESS via OpenRouter for: ${level}`);
+
+    const cleanedText = cleanJsonString(text);
+    const fixedText = fixIncompleteJson(cleanedText);
+    const parsed = JSON.parse(fixedText);
+
+    // Return ONLY the expected fields for this type
+    const resultData = {};
+    expectedFields.forEach(field => {
+      resultData[field] = parsed[field] || null;
+    });
+
+    resultData._provider = 'openrouter'; // Track which provider was used
+    return resultData;
+
+  } catch (fallbackError) {
+    console.error(`[AI-SIMPLIFY] OpenRouter FAILED for ${level}:`, fallbackError.message);
+    
+    // Return error response instead of throwing
+    const errorMsg = 'AI service temporarily unavailable. Please try again.';
+    if (level === 'summarize') return { summarize: errorMsg, _provider: 'none' };
+    if (level === 'key_takeaways') return { keyTakeaways: [errorMsg], _provider: 'none' };
+    if (level === 'concise_summary') return { conciseSummary: errorMsg, _provider: 'none' };
+    return { detailedSummary: errorMsg, _provider: 'none' };
+  }
 }
 
 function generateMockSimplification(content) {
@@ -521,14 +436,14 @@ async function simplifyWithOpenAI(content, level) {
 }
 
 export async function chatAboutWord(word, userMessage) {
-  console.log('🔍 chatAboutWord called:', { word, aiProvider: config.aiProvider, hasGeminiKey: !!config.geminiApiKey });
+  console.log(' chatAboutWord called:', { word, aiProvider: config.aiProvider, hasGeminiKey: !!config.geminiApiKey });
 
   if (config.aiProvider === 'gemini' && config.geminiApiKey) {
-    console.log('✅ Using Gemini for chat');
+    console.log('Using Gemini for chat');
     return await chatWithGemini(word, userMessage);
   }
 
-  console.log('⚠️ Falling back to mock response');
+  console.log('Falling back to mock response');
   // Mock response
   return `I understand you're asking about "${word}". ${userMessage} - This is a mock response. Please integrate with a real AI provider.`;
 }
@@ -553,69 +468,57 @@ Required JSON Structure:
 
 Keep the content concise and focused.`;
 
-  // Retry logic for API calls
-  const maxRetries = 3;
-  let attempt = 0;
+  try {
+    console.log(`💬 [AI-CHAT] Chatting about: "${word}" via Gemini`);
 
-  while (attempt < maxRetries) {
-    attempt++;
+    const result = await jsonModel.generateContent(prompt);
+    const response = await result.response;
+    const text = response.text();
 
-    try {
-      console.log(`📤 [AI-SEARCH] Attempt ${attempt}/${maxRetries} - Chatting about: ${word}`);
+    console.log(`✅ [AI-CHAT] SUCCESS via Gemini for: "${word}"`);
 
-      // Use jsonModel to enforce JSON structure
-      const result = await jsonModel.generateContent(prompt);
-      const response = await result.response;
-      const text = response.text();
-
-      console.log('📥 [AI-SEARCH] Response from Gemini:', text);
-
-      try {
-        const parsed = JSON.parse(cleanJsonString(text));
-        return {
-          summary: parsed.summary || "Summary temporarily unavailable.",
-          keyPoints: parsed.keyPoints || ["Details temporarily unavailable."]
-        };
-      } catch (parseError) {
-        console.warn(`Failed to parse Gemini chat response as JSON (Attempt ${attempt}):`, parseError);
-
-        if (attempt === maxRetries) {
-          // Fallback: return the raw text if parsing fails, frontend will handle it as string
-          return text.trim();
-        }
-        await sleep(500);
-        continue;
-      }
-    } catch (error) {
-      const errorStatus = error.status || error.response?.status;
-      const errorMessage = error.message || '';
-
-      console.error(`❌ [AI-SEARCH] Error on attempt ${attempt}/${maxRetries}:`, errorMessage);
-
-      // Handle retryable errors
-      if ((errorStatus === 503 || errorStatus === 502 || errorStatus === 429 ||
-        errorMessage.includes('overloaded') || errorMessage.includes('unavailable'))
-        && attempt < maxRetries) {
-        const backoffDelay = Math.min(1000 * Math.pow(2, attempt - 1), 10000);
-        console.warn(`⚠️ [AI-SEARCH] Retrying in ${backoffDelay}ms...`);
-        await sleep(backoffDelay);
-        continue;
-      }
-
-      // Return fallback if all retries failed or non-retryable error
-      console.warn(`⚠️ [AI-SEARCH] Returning fallback response`);
-      return {
-        summary: `I'm sorry, I couldn't process your question about "${word}" right now.`,
-        keyPoints: ["Please try again later."]
-      };
-    }
+    const parsed = JSON.parse(cleanJsonString(text));
+    return {
+      summary: parsed.summary || "Summary temporarily unavailable.",
+      keyPoints: parsed.keyPoints || ["Details temporarily unavailable."],
+      _provider: 'gemini'
+    };
+  } catch (error) {
+    console.error(`❌ [AI-CHAT] Gemini FAILED for "${word}":`, error.message);
+    console.log('🔄 [AI-CHAT] Falling back to OpenRouter...');
+    
+    // Fallback to OpenRouter
+    return await chatWithOpenRouter(word, userMessage, prompt);
   }
+}
 
-  // Fallback if somehow we exit the loop
-  return {
-    summary: `I'm sorry, I couldn't process your question about "${word}" right now.`,
-    keyPoints: ["Please try again later."]
-  };
+// OpenRouter fallback for chat
+async function chatWithOpenRouter(word, userMessage, prompt) {
+  try {
+    console.log(`🔄 [AI-CHAT] Using OpenRouter (${OPENROUTER_MODEL}) for: "${word}"`);
+    
+    const completion = await openrouter.chat.completions.create({
+      model: OPENROUTER_MODEL,
+      messages: [{ role: "user", content: prompt }]
+    });
+
+    const text = completion.choices[0]?.message?.content || '{}';
+    console.log(`✅ [AI-CHAT] SUCCESS via OpenRouter for: "${word}"`);
+
+    const parsed = JSON.parse(cleanJsonString(text));
+    return {
+      summary: parsed.summary || "Summary temporarily unavailable.",
+      keyPoints: parsed.keyPoints || ["Details temporarily unavailable."],
+      _provider: 'openrouter'
+    };
+  } catch (fallbackError) {
+    console.error(`❌ [AI-CHAT] OpenRouter FAILED for "${word}":`, fallbackError.message);
+    return {
+      summary: `I'm sorry, I couldn't process your question about "${word}" right now.`,
+      keyPoints: ["Please try again later."],
+      _provider: 'none'
+    };
+  }
 }
 
 // Find related blogs based on keyword

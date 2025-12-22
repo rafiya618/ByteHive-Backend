@@ -1,8 +1,8 @@
 import Streak from "../models/streakModel.js";
 import {
-  BADGE_DEFINITIONS, normalizeUserId,
-  checkAndAwardBadges,
-  calculateStreakExpiry
+    BADGE_DEFINITIONS, normalizeUserId,
+    checkAndAwardBadges,
+    calculateStreakExpiry
 } from "../helpers/retentionHelper.js";
 
 // ========== STREAK CONTROLLERS ==========
@@ -21,8 +21,36 @@ export const getUserStreak = async (req, res) => {
       streak = await Streak.create({ user_id: normalizedUserId, current_level: 1, badges_earned: [] });
     }
 
-    // Retroactive Badge Check: Award pending badges based on stats
-    const { newBadgesEarned, newBadgeDetails } = checkAndAwardBadges(streak);
+    // ✅ Fetch UserActivity FIRST (single source of truth for metrics)
+    const UserActivity = (await import('../models/activityModel.js')).default;
+    const userActivity = await UserActivity.findOne({ user_id: normalizedUserId });
+
+    // ✅ Count posts directly from Post collection (single source of truth for post count)
+    let totalPostsCount = 0;
+    try {
+      const axios = (await import('axios')).default;
+      const postsServiceUrl = process.env.POSTS_SERVICE_URL || 'http://localhost:5000';
+      const postsResponse = await axios.get(`${postsServiceUrl}/api/posts`, {
+        params: { user_id: normalizedUserId, limit: 1 },
+        timeout: 5000
+      });
+      totalPostsCount = postsResponse.data?.total || 0;
+    } catch (postsError) {
+      console.warn('[RETENTION] Failed to fetch posts count (non-blocking):', postsError.message);
+      // Fallback to activity tracking if posts service unavailable
+      totalPostsCount = userActivity?.created_posts?.length || 0;
+    }
+
+    const activityMetrics = {
+      total_posts: totalPostsCount,
+      total_reads: userActivity?.read_posts?.length || 0,
+      total_comments: userActivity?.commented_posts?.length || 0,
+      total_likes: (userActivity?.upvoted_posts?.length || 0) + (userActivity?.downvoted_posts?.length || 0)
+    };
+
+    // ✅ Retroactive Badge Check: Use REAL activity metrics
+    const streakWithMetrics = { ...streak.toObject(), ...activityMetrics };
+    const { newBadgesEarned, newBadgeDetails } = checkAndAwardBadges(streakWithMetrics);
 
 
     let needsSave = false;
@@ -49,19 +77,7 @@ export const getUserStreak = async (req, res) => {
       await streak.save();
     }
 
-    // ✅ Calculate metrics from UserActivity (unique blog counts)
-    const UserActivity = (await import('../models/activityModel.js')).default;
-    const userActivity = await UserActivity.findOne({ user_id: normalizedUserId });
-
-    const activityMetrics = {
-      total_posts: 0, // Not tracked in UserActivity - use Streak value
-      total_reads: userActivity?.read_posts?.length || 0, // Unique blogs read
-      total_comments: userActivity?.commented_posts?.length || 0, // Unique blogs commented
-      total_likes: (userActivity?.upvoted_posts?.length || 0) + (userActivity?.downvoted_posts?.length || 0) // Upvotes + Downvotes
-    };
-
-    // ✅ Level is calculated from badge count in updateBehaviorMetrics
-    // No manual recalculation needed - trust the stored value
+  
 
     return res.status(200).json({
       ok: true,
@@ -79,7 +95,7 @@ export const getUserStreak = async (req, res) => {
         total_comments: activityMetrics.total_comments,
         total_likes: activityMetrics.total_likes,
         badges_earned: streak.badges_earned,
-        badge_details: streak.badge_details, // ✅ CRITICAL: Frontend needs this!
+        badge_details: streak.badge_details, 
         reset_count: streak.reset_count,
         streak_expires_at: streak.streak_expires_at,
         server_time: new Date()

@@ -229,7 +229,7 @@ export const updateBehaviorMetrics = async (user_id, activity_type, Streak) => {
 
   if (userActivity) {
     const metrics = {
-      total_posts: 0, // Not tracked in UserActivity
+      total_posts: userActivity.created_posts?.length || 0,
       total_reads: userActivity.read_posts?.length || 0,
       total_comments: userActivity.commented_posts?.length || 0,
       total_likes: (userActivity.upvoted_posts?.length || 0) + (userActivity.downvoted_posts?.length || 0)

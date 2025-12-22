@@ -10,18 +10,18 @@ export async function getMeaning(req, res) {
     }
 
     const cleanWord = word.trim().toLowerCase();
-    console.log(`🔍 Looking up meaning for: "${cleanWord}"`);
+    console.log(` Looking up meaning for: "${cleanWord}"`);
 
     // Check database first
     let meaning = await Meaning.findOne({ word: cleanWord });
 
     if (meaning) {
-      console.log('✅ Found meaning in database');
+      console.log('Found meaning in database');
       // Increment search count
       meaning.searchCount += 1;
       await meaning.save();
     } else {
-      console.log('🔄 Generating meaning from AI');
+      console.log('Generating meaning from AI');
       const aiMeaning = await getMeaningFromAI(cleanWord);
 
       // Save to database for future use
@@ -38,7 +38,7 @@ export async function getMeaning(req, res) {
       });
 
       await meaning.save();
-      console.log('💾 Meaning saved to database');
+      console.log(' Meaning saved to database');
     }
 
     res.status(200).json({
@@ -54,7 +54,7 @@ export async function getMeaning(req, res) {
       },
     });
   } catch (error) {
-    console.error('❌ Error in getMeaning:', error);
+    console.error(' Error in getMeaning:', error);
 
     // Don't save placeholder data - return proper error to user
     const errorCode = error.code || 'UNKNOWN_ERROR';
@@ -92,7 +92,7 @@ export async function searchMeanings(req, res) {
       return res.status(400).json({ error: 'Search query is required' });
     }
 
-    console.log(`🔎 Searching meanings for: "${query}"`);
+    console.log(` Searching meanings for: "${query}"`);
 
     const meanings = await Meaning.find({
       $or: [
@@ -109,7 +109,7 @@ export async function searchMeanings(req, res) {
       data: meanings,
     });
   } catch (error) {
-    console.error('❌ Error in searchMeanings:', error);
+    console.error('Error in searchMeanings:', error);
     res.status(500).json({
       error: 'Failed to search meanings',
       message: error.message,

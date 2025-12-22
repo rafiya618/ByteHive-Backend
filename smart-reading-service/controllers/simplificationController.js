@@ -10,7 +10,7 @@ export const simplifyPost = async (req, res) => {
   try {
     const { postId, content, simplificationLevel = 'detailed_summary' } = req.body;
 
-    console.log(`✨ Simplifying post ${postId} with level: ${simplificationLevel} by user: ${req.user?.id}`);
+    console.log(` Simplifying post ${postId} with level: ${simplificationLevel} by user: ${req.user?.id}`);
 
     // Validate input
     if (!content || !postId) {
@@ -28,10 +28,10 @@ export const simplifyPost = async (req, res) => {
       });
     }
 
-    console.log('📋 Requested level:', simplificationLevel);
+    console.log(' Requested level:', simplificationLevel);
 
     // Always generate fresh simplification (no caching)
-    console.log('🔄 Generating fresh simplification with AI');
+    console.log(' Generating fresh simplification with AI');
     const simplifiedData = await simplifyContentWithAI(content, simplificationLevel);
 
     return res.status(200).json({
@@ -40,7 +40,7 @@ export const simplifyPost = async (req, res) => {
       data: simplifiedData
     });
   } catch (error) {
-    console.error('❌ Error in simplifyPost:', error);
+    console.error(' Error in simplifyPost:', error);
 
     // Handle specific error codes from AI helper
     if (error.code === 'SERVICE_UNAVAILABLE') {

@@ -10,7 +10,7 @@ export async function searchBlogs(req, res) {
       return res.status(400).json({ error: 'Keyword is required' });
     }
 
-    console.log(`🔎 Searching related blogs for: "${keyword}"`);
+    console.log(`Searching related blogs for: "${keyword}"`);
 
     // Check cache first
     let relatedBlog = await RelatedBlog.findOne({
@@ -18,7 +18,7 @@ export async function searchBlogs(req, res) {
     });
 
     if (relatedBlog) {
-      console.log('✅ Found cached related blogs');
+      console.log('Found cached related blogs');
       relatedBlog.searchCount += 1;
       await relatedBlog.save();
 
@@ -30,7 +30,7 @@ export async function searchBlogs(req, res) {
     }
 
     // Fetch posts from posts service
-    console.log('🔄 Fetching posts from posts service');
+    console.log('Fetching posts from posts service');
     let allPosts = [];
 
     try {
@@ -39,7 +39,7 @@ export async function searchBlogs(req, res) {
       );
       allPosts = response.data.posts || response.data;
     } catch (error) {
-      console.warn('⚠️ Could not fetch posts from posts service:', error.message);
+      console.warn('Could not fetch posts from posts service:', error.message);
       allPosts = [];
     }
 
@@ -55,7 +55,7 @@ export async function searchBlogs(req, res) {
       });
 
       await relatedBlog.save();
-      console.log('💾 Related blogs cached');
+      console.log(' Related blogs cached');
     }
 
     res.status(200).json({
@@ -64,7 +64,7 @@ export async function searchBlogs(req, res) {
       data: relatedPosts,
     });
   } catch (error) {
-    console.error('❌ Error in searchBlogs:', error);
+    console.error(' Error in searchBlogs:', error);
     res.status(500).json({
       error: 'Failed to search blogs',
       message: error.message,
@@ -80,7 +80,7 @@ export async function getRelatedBlogs(req, res) {
       return res.status(400).json({ error: 'Keyword is required' });
     }
 
-    console.log(`📚 Fetching related blogs for: "${keyword}"`);
+    console.log(`Fetching related blogs for: "${keyword}"`);
 
     const relatedBlog = await RelatedBlog.findOne({
       keyword: keyword.toLowerCase(),
@@ -99,7 +99,7 @@ export async function getRelatedBlogs(req, res) {
       data: relatedBlog.relatedPosts,
     });
   } catch (error) {
-    console.error('❌ Error in getRelatedBlogs:', error);
+    console.error('Error in getRelatedBlogs:', error);
     res.status(500).json({
       error: 'Failed to fetch related blogs',
       message: error.message,

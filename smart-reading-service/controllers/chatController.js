@@ -10,7 +10,7 @@ export async function chatAboutWord(req, res) {
       });
     }
 
-    console.log(`💬 Chatting about "${word}" with message: "${message}"`);
+    console.log(`Chatting about "${word}" with message: "${message}"`);
 
     const aiResponse = await aiChatAboutWord(word, message);
 
@@ -24,7 +24,7 @@ export async function chatAboutWord(req, res) {
       },
     });
   } catch (error) {
-    console.error('❌ Error in chatAboutWord:', error);
+    console.error('Error in chatAboutWord:', error);
     res.status(500).json({
       error: 'Failed to process chat message',
       message: error.message,

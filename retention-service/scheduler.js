@@ -53,11 +53,11 @@ const checkExpiringStreaks = async () => {
             const isEnabled = prefs?.perType?.updates?.streakReminder?.enabled ?? true;
 
             if (!isEnabled) {
-                console.log(`⏭️ Skipping user ${streak.user_id} - streak reminders disabled`);
+                console.log(` Skipping user ${streak.user_id} - streak reminders disabled`);
                 continue;
             }
 
-            // ✅ Check if we already sent a warning today (idempotency)
+            //  Check if we already sent a warning today (idempotency)
             const dateKey = now.toISOString().split('T')[0];
             const triggerId = `streak-warning-${streak.user_id}-${dateKey}`;
 

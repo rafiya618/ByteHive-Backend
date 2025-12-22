@@ -8,19 +8,19 @@ export const logActivity = async (req, res) => {
   try {
     const { user_id, activity_type, post_id, comment_id } = req.body;
 
-    console.log('📝 [ACTIVITY] Logging activity request:', { user_id, activity_type, post_id, comment_id });
+    console.log('[ACTIVITY] Logging activity request:', { user_id, activity_type, post_id, comment_id });
 
     // Validate required fields (blogId optional for word_meaning and search)
     if (!user_id || !activity_type) {
-      console.warn('⚠️ [ACTIVITY] Missing required fields:', { user_id, activity_type });
+      console.warn('[ACTIVITY] Missing required fields:', { user_id, activity_type });
       return res.status(400).json({
         error: 'user_id and activity_type are required'
       });
     }
 
-    const validActivityTypes = ["read", "like", "upvote", "downvote", "comment", "simplify", "word_meaning", "search"];
+    const validActivityTypes = ["read", "like", "upvote", "downvote", "comment", "simplify", "word_meaning", "search", "post"];
     if (!validActivityTypes.includes(activity_type)) {
-      console.warn('⚠️ [ACTIVITY] Invalid activity type:', activity_type);
+      console.warn('[ACTIVITY] Invalid activity type:', activity_type);
       return res.status(400).json({
         ok: false,
         message: `Invalid activity_type. Must be one of: ${validActivityTypes.join(", ")}`
@@ -35,8 +35,8 @@ export const logActivity = async (req, res) => {
       // Exceptions for activities that don't require a post
       const activitiesWithoutPost = ['word_meaning', 'search'];
       if (!activitiesWithoutPost.includes(activity_type)) {
-        console.warn('⚠️ [ACTIVITY] Missing blog ID');
-        console.warn('⚠️ [ACTIVITY] Request body was:', req.body);
+        console.warn('[ACTIVITY] Missing blog ID');
+        console.warn('[ACTIVITY] Request body was:', req.body);
         return res.status(400).json({
           ok: false,
           message: "post_id or comment_id is required"
@@ -46,16 +46,16 @@ export const logActivity = async (req, res) => {
 
     // Normalize user_id to string for consistency
     const normalizedUserId = String(user_id);
-    console.log('🔄 [ACTIVITY] Normalized user_id:', normalizedUserId);
+    console.log('[ACTIVITY] Normalized user_id:', normalizedUserId);
 
     // Find or create user activity document
     let userActivity = await UserActivity.findOne({ user_id: normalizedUserId });
 
     if (!userActivity) {
-      console.log('➕ [ACTIVITY] Creating new UserActivity document for user:', normalizedUserId);
+      console.log('[ACTIVITY] Creating new UserActivity document for user:', normalizedUserId);
       userActivity = new UserActivity({ user_id: normalizedUserId });
     } else {
-      console.log('✅ [ACTIVITY] Found existing UserActivity document');
+      console.log('[ACTIVITY] Found existing UserActivity document');
     }
 
     // Add activity (automatic deduplication handled by model method)
@@ -63,14 +63,16 @@ export const logActivity = async (req, res) => {
       'read': 'read_posts',
       'like': 'liked_posts',
       'upvote': 'upvoted_posts',
+      'downvote': 'downvoted_posts',
       'comment': 'commented_posts',
-      'simplify': 'simplified_posts'
+      'simplify': 'simplified_posts',
+      'post': 'created_posts'
     };
     const fieldName = activityFieldMap[activity_type];
     const existingEntry = fieldName ? userActivity[fieldName]?.find(e => e.blog_id === blogId) : null;
 
     if (existingEntry) {
-      console.log(`🔁 [ACTIVITY] Updating existing ${activity_type} for blog ${blogId}, count: ${existingEntry.count} → ${existingEntry.count + 1}`);
+      console.log(`[ACTIVITY] Updating existing ${activity_type} for blog ${blogId}, count: ${existingEntry.count} → ${existingEntry.count + 1}`);
     } else {
       console.log(`✨ [ACTIVITY] Adding new ${activity_type} for blog ${blogId}`);
     }
@@ -78,18 +80,18 @@ export const logActivity = async (req, res) => {
     userActivity.addActivity(activity_type, blogId);
     await userActivity.save();
 
-    console.log('💾 [ACTIVITY] Activity saved successfully');
+    console.log(' [ACTIVITY] Activity saved successfully');
 
     // Update streak and behavior metrics
     try {
       const { updateBehaviorMetrics, updateStreakLogic } = await import('../helpers/retentionHelper.js');
       const Streak = (await import('../models/streakModel.js')).default;
-      console.log('🔄 [ACTIVITY] Updating behavior metrics...');
+      console.log(' [ACTIVITY] Updating behavior metrics...');
       await updateStreakLogic(normalizedUserId, Streak);
       const updatedStreak = await updateBehaviorMetrics(normalizedUserId, activity_type, Streak);
-      console.log('✅ [ACTIVITY] Metrics updated. Level:', updatedStreak.current_level, 'Badges:', updatedStreak.badges_earned.length);
+      console.log('[ACTIVITY] Metrics updated. Level:', updatedStreak.current_level, 'Badges:', updatedStreak.badges_earned.length);
     } catch (metricsError) {
-      console.error('⚠️ [ACTIVITY] Metrics update failed (non-blocking):', metricsError.message);
+      console.error('[ACTIVITY] Metrics update failed (non-blocking):', metricsError.message);
     }
 
     return res.status(201).json({
@@ -103,10 +105,10 @@ export const logActivity = async (req, res) => {
       }
     });
   } catch (err) {
-    console.error("❌ [ACTIVITY] Error logging activity:", err.message);
-    console.error("❌ [ACTIVITY] Error name:", err.name);
-    console.error("❌ [ACTIVITY] Full error:", err);
-    console.error("❌ [ACTIVITY] Stack trace:");
+    console.error("[ACTIVITY] Error logging activity:", err.message);
+    console.error("[ACTIVITY] Error name:", err.name);
+    console.error("[ACTIVITY] Full error:", err);
+    console.error("[ACTIVITY] Stack trace:");
     console.error(err.stack);
     return res.status(500).json({
       ok: false,
@@ -129,7 +131,7 @@ export const removeActivity = async (req, res) => {
 
     // Validate required fields
     if (!user_id || !activity_type || !post_id) {
-      console.warn('⚠️ [ACTIVITY-REMOVE] Missing required fields');
+      console.warn('[ACTIVITY-REMOVE] Missing required fields');
       return res.status(400).json({
         ok: false,
         error: 'user_id, activity_type, and post_id are required'
@@ -138,7 +140,7 @@ export const removeActivity = async (req, res) => {
 
     const validActivityTypes = ["upvote", "downvote", "like", "comment"];
     if (!validActivityTypes.includes(activity_type)) {
-      console.warn('⚠️ [ACTIVITY-REMOVE] Invalid activity type:', activity_type);
+      console.warn('[ACTIVITY-REMOVE] Invalid activity type:', activity_type);
       return res.status(400).json({
         ok: false,
         error: `Invalid activity_type for removal. Must be one of: ${validActivityTypes.join(", ")}`
@@ -147,7 +149,7 @@ export const removeActivity = async (req, res) => {
 
     // Normalize user_id
     const normalizedUserId = String(user_id);
-    console.log('🔄 [ACTIVITY-REMOVE] Normalized user_id:', normalizedUserId);
+    console.log(' [ACTIVITY-REMOVE] Normalized user_id:', normalizedUserId);
 
     // Find user activity document
     let userActivity = await UserActivity.findOne({ user_id: normalizedUserId });
@@ -165,7 +167,7 @@ export const removeActivity = async (req, res) => {
 
     if (removed) {
       await userActivity.save();
-      console.log('✅ [ACTIVITY-REMOVE] Activity removed and saved');
+      console.log(' [ACTIVITY-REMOVE] Activity removed and saved');
 
       return res.status(200).json({
         ok: true,
@@ -191,8 +193,8 @@ export const removeActivity = async (req, res) => {
       });
     }
   } catch (err) {
-    console.error("❌ [ACTIVITY-REMOVE] Error:", err.message);
-    console.error("❌ [ACTIVITY-REMOVE] Stack trace:", err.stack);
+    console.error(" [ACTIVITY-REMOVE] Error:", err.message);
+    console.error(" [ACTIVITY-REMOVE] Stack trace:", err.stack);
     return res.status(500).json({
       ok: false,
       error: err.message

@@ -52,6 +52,14 @@ const userActivitySchema = new mongoose.Schema({
     last_activity_date: { type: Date, default: Date.now }
   }],
 
+  // Posts created by the user (for badge tracking)
+  created_posts: [{
+    blog_id: { type: String, required: true },
+    count: { type: Number, default: 1 },
+    first_activity_date: { type: Date, default: Date.now },
+    last_activity_date: { type: Date, default: Date.now }
+  }],
+
   // Aggregate timestamps
   first_activity_date: { type: Date },
   last_activity_date: { type: Date }
@@ -67,7 +75,8 @@ userActivitySchema.methods.addActivity = function (activityType, blogId) {
     'upvote': 'upvoted_posts',
     'comment': 'commented_posts',
     'downvote': 'downvoted_posts',
-    'simplify': 'simplified_posts'
+    'simplify': 'simplified_posts',
+    'post': 'created_posts'
   };
 
   const fieldName = fieldMap[activityType];
@@ -101,7 +110,7 @@ userActivitySchema.methods.addActivity = function (activityType, blogId) {
   }
   this.last_activity_date = new Date();
 
-  console.log(`✅ [MODEL] Activity added successfully`);
+  console.log(` [MODEL] Activity added successfully`);
 };
 
 // Instance method to remove activity completely (for vote removals)
@@ -114,7 +123,8 @@ userActivitySchema.methods.removeActivity = function (activityType, blogId) {
     'upvote': 'upvoted_posts',
     'comment': 'commented_posts',
     'downvote': 'downvoted_posts',
-    'simplify': 'simplified_posts'
+    'simplify': 'simplified_posts',
+    'post': 'created_posts'
   };
 
   const fieldName = fieldMap[activityType];

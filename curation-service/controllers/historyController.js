@@ -1,12 +1,5 @@
 import History from '../models/history.js';
 
-/**
- * Record a post view
- * UPDATED: Day-based deduplication logic
- * - Same day, same post: Updates lastAccessed and increments viewCount
- * - Different day, same post: Creates new history entry
- * - viewedDate is the calendar date (start of day in UTC)
- */
 const recordView = async (req, res, next) => {
   try {
     const { postId, userId } = req.body;

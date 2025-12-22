@@ -1,4 +1,4 @@
-// scripts/watchLaterNotifier.js
+
 // Scheduled job to notify users if a post in 'Watch Later' is not viewed in 7 days
 import mongoose from 'mongoose';
 import SavedPost from '../models/savedPost.js';
