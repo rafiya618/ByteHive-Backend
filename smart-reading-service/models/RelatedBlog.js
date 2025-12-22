@@ -31,5 +31,4 @@ const relatedBlogSchema = new Schema(
 );
 
 relatedBlogSchema.index({ keyword: 1 });
-
 export const RelatedBlog = model('RelatedBlog', relatedBlogSchema);

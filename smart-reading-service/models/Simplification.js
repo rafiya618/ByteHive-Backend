@@ -2,14 +2,6 @@ import mongoose from 'mongoose';
 
 const { Schema, model } = mongoose;
 
-/**
- * Simplification Schema
- * UPDATED: Now supports 4 fixed dropdown options for simplification levels
- * - summarize: Brief overview
- * - key_takeaways: Bullet points only
- * - concise_summary: Short paragraph summary
- * - detailed_summary: Comprehensive summary
- */
 const simplificationSchema = new Schema(
   {
     postId: {

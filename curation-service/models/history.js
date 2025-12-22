@@ -1,14 +1,5 @@
 import mongoose from 'mongoose';
 
-/**
- * History Schema - Tracks user's post viewing history
- * 
- * UPDATED: Day-based history tracking
- * - viewedDate: Calendar date (start of day in UTC) for grouping by day
- * - lastAccessed: Most recent view timestamp within that day
- * - Allows multiple entries for same post across different days
- * - Prevents duplicate entries within the same day
- */
 const historySchema = new mongoose.Schema({
   userId: {
     type: String,
