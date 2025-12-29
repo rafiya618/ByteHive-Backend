@@ -25,6 +25,9 @@ const communitySchema = new mongoose.Schema({
   members: [{
     type: String,
   }],
+  joinRequests: [{
+    type: String,
+  }],
   posts: [{
     type: String,
   }],

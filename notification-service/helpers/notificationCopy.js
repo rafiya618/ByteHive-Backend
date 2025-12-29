@@ -49,6 +49,18 @@ export const notificationCopy = {
     body: () => "You are now connected."
   },
 
+  join_request: {
+    subject: (actor) => `New join request from ${actor}`,
+    headline: (actor) => `${actor} requested to join your community`,
+    body: (actor) => `${actor} wants to join. Review the request to accept or decline.`
+  },
+
+  request_approved: {
+    subject: (actor) => "Community join request approved",
+    headline: (actor) => "Your request to join has been approved",
+    body: (actor) => "You are now a member of the community."
+  },
+
   // ===== UPDATES =====
   newPost: {
     subject: () => "New post from your network",

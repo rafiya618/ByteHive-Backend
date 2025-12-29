@@ -10,14 +10,15 @@ import { buildNotificationUrl } from "./buildNotificationUrl.js";
  *       ["Alice", "Bob", "Charlie", "Dan"] → "Alice, Bob, Charlie, and others"
  */
 function formatActorList(actors, totalCount) {
+    if (!actors || actors.length === 0) return "Someone";
     const displayedCount = actors.length;
     const moreCount = totalCount - displayedCount;
 
     if (displayedCount === 1) {
-        return actors[0];
+        return actors[0] || "Someone";
     } else if (displayedCount === 2) {
         return `${actors[0]} and ${actors[1]}`;
-    } else if (displayedCount === 3 ) {
+    } else if (displayedCount === 3) {
         return `${actors[0]}, ${actors[1]}, and ${actors[2]}`;
     } else {
         return `${actors.slice(0, 3).join(", ")}, and others`;
@@ -27,27 +28,46 @@ function formatActorList(actors, totalCount) {
 /**
  * Builds a human-readable aggregated message.
  */
-export function buildAggregatedMessage(triggerType, actors, totalCount) {
+export function buildAggregatedMessage(triggerType, actors, totalCount, notification) {
     const actorText = formatActorList(actors, totalCount);
+    // Be extra protective: if actorText is empty or "Someone", don't add @
+    let actorName = "Someone";
+    if (actorText && actorText !== "Someone") {
+        actorName = `**@${actorText}**`;
+    }
+
+    const commName = notification?.communityName ? `**${notification.communityName}**` : "your community";
 
     switch (triggerType) {
         case "reply":
-            return `${actorText} replied to your comment${totalCount > 1 ? ` (${totalCount} replies)` : ""}`;
+            return `${actorName} replied to your comment${totalCount > 1 ? ` (${totalCount} replies)` : ""}`;
 
         case "comment":
-            return `${actorText} commented on your post${totalCount > 1 ? ` (${totalCount} comments)` : ""}`;
+            return `${actorName} commented on your post${totalCount > 1 ? ` (${totalCount} comments)` : ""}`;
 
         case "likeComment":
-            return `${actorText} liked your comment`;
+            return `${actorName} liked your comment`;
 
         case "likePost":
-            return `${actorText} liked your post`;
+            return `${actorName} liked your post`;
 
         case "mention":
-            return `${actorText} mentioned you`;
+            return `${actorName} mentioned you`;
+
+        case "join_request":
+            return `${actorName} requested to join ${commName}${totalCount > 1 ? ` (${totalCount} requests)` : ""}`;
+
+        case "request_approved":
+            return `${actorName} approved your request to join ${commName}`;
+
+        case "community_follow":
+            return `${actorName} started following your community ${commName}`;
+
+        case "follow":
+            return `${actorName} started following you`;
 
         default:
-            return `${actorText} did ${triggerType}${totalCount > 1 ? ` (${totalCount} times)` : ""}`;
+            return `${actorName} did ${triggerType}${totalCount > 1 ? ` (${totalCount} times)` : ""}`;
     }
 }
 
@@ -113,7 +133,7 @@ export function updateAggregation(notification, senderUsername, triggerType, act
     }
 
     // rebuild message
-    notification.message = buildAggregatedMessage(triggerType, actors, count);
+    notification.message = buildAggregatedMessage(triggerType, actors, count, notification);
     notification.updatedAt = new Date();
 
     return notification;

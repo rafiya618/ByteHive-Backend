@@ -11,7 +11,7 @@ const getRedisPub = async () => {
   return redisPub;
 };
 
-const userFacingTypes = ["comment", "reply", "mention", "like", "follow", "message"];
+const userFacingTypes = ["comment", "reply", "mention", "like", "follow", "message", "joinRequest", "joinApproved"];
 
 export const getPreferences = async (req, res) => {
   try {

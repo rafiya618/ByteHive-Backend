@@ -1,45 +1,48 @@
 import Community from '../models/Community.js';
 import { cloudinary, uploadToCloudinary } from '../config/cloudinary.js';
+import { createRedisClients } from "../../shared-config/redisClient.js";
+
+const { pub } = await createRedisClients();
 
 // Helper function to check authorization
 const checkCommunityAuthorization = (community, user_id, requireAdminOnly = false) => {
   if (!user_id) {
     return { authorized: false, message: 'User ID is required for authorization' };
   }
-  
+
   const isAdmin = community.user_id === user_id; // Fixed: use user_id from database
   const isModerator = community.moderators.includes(user_id);
-  
+
   if (requireAdminOnly && !isAdmin) {
     return { authorized: false, message: 'Access denied. Only admin can perform this action.' };
   }
-  
+
   if (!isAdmin && !isModerator) {
     return { authorized: false, message: 'Access denied. Only admin and moderators can perform this action.' };
   }
-  
+
   return { authorized: true };
 };
 
 // Helper function to handle image upload
 const handleImageUpload = async (file, existingImageUrl = null) => {
   if (!file || !file.buffer) return null;
-  
+
   console.log('File received:', {
     originalname: file.originalname,
     mimetype: file.mimetype,
     size: file.buffer.length
   });
-  
+
   // Validate file
   if (!file.mimetype.startsWith('image/')) {
     throw new Error('Only image files are allowed');
   }
-  
+
   if (file.buffer.length > 5 * 1024 * 1024) {
     throw new Error('File size too large. Maximum 5MB allowed.');
   }
-  
+
   // Delete old image if exists and not default
   if (existingImageUrl && !existingImageUrl.includes('unsplash.com')) {
     try {
@@ -53,7 +56,7 @@ const handleImageUpload = async (file, existingImageUrl = null) => {
       console.log('Error deleting old image:', deleteError.message);
     }
   }
-  
+
   const result = await uploadToCloudinary(file.buffer, 'community-images');
   return result.secure_url;
 };
@@ -61,7 +64,7 @@ const handleImageUpload = async (file, existingImageUrl = null) => {
 // Helper function to delete image from Cloudinary
 const deleteImageFromCloudinary = async (imageUrl) => {
   if (!imageUrl || imageUrl.includes('unsplash.com')) return;
-  
+
   try {
     const urlParts = imageUrl.split('/');
     const publicIdWithExtension = urlParts[urlParts.length - 1];
@@ -110,15 +113,15 @@ export const createCommunity = async (req, res) => {
         communityData.image = imageUrl;
       }
     } catch (uploadError) {
-      return res.status(400).json({ 
-        message: 'Image upload failed', 
-        error: uploadError.message 
+      return res.status(400).json({
+        message: 'Image upload failed',
+        error: uploadError.message
       });
     }
 
     const community = new Community(communityData);
     await community.save();
-    
+
     res.status(201).json({
       message: 'Community created successfully',
       community,
@@ -221,8 +224,11 @@ export const deleteCommunity = async (req, res) => {
 // == Discover Communities 
 export const discoverCommunities = async (req, res) => {
   try {
-    const { search, tags, page = 1, limit = 10, visible = 'public' } = req.query;
-    let query = { visible };
+    const { search, tags, page = 1, limit = 10, visible, user_id } = req.query;
+    let query = {};
+    if (visible) {
+      query.visible = visible;
+    }
 
     if (search) {
       query.$or = [
@@ -236,6 +242,8 @@ export const discoverCommunities = async (req, res) => {
       query.community_tags = { $in: tagArray };
     }
 
+    // We need joinRequests to determine hasRequested, so we can't fully exclude it if we want to calculate it server-side,
+    // OR we calculate it here and then remove it.
     const communities = await Community.find(query)
       .sort({ createdAt: -1 })
       .limit(limit * 1)
@@ -243,8 +251,23 @@ export const discoverCommunities = async (req, res) => {
 
     const total = await Community.countDocuments(query);
 
+    // Map to add hasRequested and remove sensitive fields
+    const sanitizedCommunities = communities.map(c => {
+      const communityObj = c.toObject();
+      const hasRequested = user_id && communityObj.joinRequests?.includes(user_id);
+
+      delete communityObj.members;
+      delete communityObj.posts;
+      delete communityObj.joinRequests;
+
+      return {
+        ...communityObj,
+        hasRequested: !!hasRequested
+      };
+    });
+
     res.json({
-      communities,
+      communities: sanitizedCommunities,
       totalPages: Math.ceil(total / limit),
       currentPage: page,
       total,
@@ -265,6 +288,33 @@ export const getCommunityDetails = async (req, res) => {
       return res.status(404).json({ message: 'Community not found' });
     }
 
+    const userId = req.query.user_id || req.body.user_id; // Check identifying info
+
+    // Privacy Check
+    if (community.visible === 'private') {
+      const isMember = userId && community.members.some(m => m.toString() === userId.toString());
+      const isAdmin = userId && community.user_id.toString() === userId.toString();
+
+      if (!isMember && !isAdmin) {
+        // Return limited details
+        return res.json({
+          community: {
+            _id: community._id,
+            community_name: community.community_name,
+            description: community.description,
+            image: community.image,
+            visible: community.visible,
+            no_of_followers: community.no_of_followers,
+            no_of_posts: community.no_of_posts,
+            community_tags: community.community_tags,
+            user_id: community.user_id, // Owner
+            isPrivateAndNotJoined: true, // Frontend flag
+            hasRequested: userId ? community.joinRequests?.some(r => r.toString() === userId.toString()) : false
+          }
+        });
+      }
+    }
+
     // Removed: await Community.findByIdAndUpdate(communityId, { $inc: { no_of_views: 1 } });
 
     res.json({ community });
@@ -278,7 +328,7 @@ export const followCommunity = async (req, res) => {
   try {
     const { communityId } = req.params;
     const { user_id } = req.body;
-    
+
     if (!user_id) {
       return res.status(400).json({ message: 'User ID is required' });
     }
@@ -288,8 +338,52 @@ export const followCommunity = async (req, res) => {
       return res.status(404).json({ message: 'Community not found' });
     }
 
-    if (community.members.includes(user_id)) {
+    const isMember = user_id && community.members.some(m => m.toString() === user_id.toString());
+    if (isMember) {
       return res.status(400).json({ message: 'Already following this community' });
+    }
+
+    // Check for Private Community
+    if (community.visible === 'private') {
+      const hasRequested = user_id && community.joinRequests?.some(r => r.toString() === user_id.toString());
+      if (hasRequested) {
+        return res.status(400).json({ message: 'Join request already pending' });
+      }
+
+      await Community.findByIdAndUpdate(communityId, {
+        $addToSet: { joinRequests: user_id.toString() }
+      });
+
+      // Publish Notification Event for Admin
+      if (pub) {
+        const notificationPayload = {
+          receiverId: community.user_id.toString(), // Admin
+          senderId: user_id.toString(),
+          triggerType: 'join_request', // New trigger type
+          entityType: 'community',
+          entityId: community._id.toString(),
+          communityName: community.community_name,
+          triggerId: `${user_id}-${community._id}-join`, // Unique trigger ID
+          message: `requested to join ${community.community_name}`,
+          navigate: `/community/${community._id}` // Admin goes to community to manage
+        };
+
+        console.log("📢 [COMMUNITY] Publishing join_request notification:", notificationPayload);
+        try {
+          await pub.publish("notification:event", JSON.stringify({ notificationPayload }));
+          console.log("✅ [COMMUNITY] Published successfully to notification:event");
+        } catch (err) {
+          console.error("❌ [COMMUNITY] Failed to publish notification:", err.message);
+        }
+      } else {
+        console.warn("⚠️ [COMMUNITY] Redis publisher (pub) is not initialized!");
+      }
+
+      return res.json({
+        message: 'Join request sent',
+        status: 'requested',
+        success: true
+      });
     }
 
     await Community.findByIdAndUpdate(communityId, {
@@ -297,12 +391,36 @@ export const followCommunity = async (req, res) => {
       $inc: { no_of_followers: 1 },
     });
 
-    res.json({ 
+    // Publish Follow Notification (if enabled)
+    if (pub) {
+      const notificationPayload = {
+        receiverId: community.user_id.toString(), // Admin
+        senderId: user_id.toString(),
+        triggerType: 'community_follow',
+        entityType: 'community',
+        entityId: community._id.toString(),
+        communityName: community.community_name,
+        triggerId: `${user_id}-${community._id}-follow`, // Unique trigger ID
+        message: `started following your community ${community.community_name}`,
+        navigate: `/community/${community._id}`
+      };
+
+      console.log("📢 [COMMUNITY] Publishing community_follow notification:", notificationPayload);
+      try {
+        await pub.publish("notification:event", JSON.stringify({ notificationPayload }));
+      } catch (err) {
+        console.error("❌ [COMMUNITY] Failed to publish notification:", err.message);
+      }
+    }
+
+    res.json({
       message: 'Successfully followed community',
       success: true,
+      status: 'following',
       communityId: communityId
     });
   } catch (error) {
+    console.error('Follow error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
@@ -322,16 +440,22 @@ export const unfollowCommunity = async (req, res) => {
       return res.status(404).json({ message: 'Community not found' });
     }
 
-    if (!community.members.includes(user_id)) {
-      return res.status(400).json({ message: 'Not following this community' });
+    const isMember = user_id && community.members.some(m => m.toString() === user_id.toString());
+    const hasRequested = user_id && community.joinRequests?.some(r => r.toString() === user_id.toString());
+
+    if (!isMember && !hasRequested) {
+      return res.status(400).json({ message: 'Not following or requested to follow this community' });
     }
 
     await Community.findByIdAndUpdate(communityId, {
-      $pull: { members: user_id },
-      $inc: { no_of_followers: -1 },
+      $pull: {
+        members: user_id.toString(),
+        joinRequests: user_id.toString()
+      },
+      $inc: { no_of_followers: isMember ? -1 : 0 },
     });
 
-    res.json({ 
+    res.json({
       message: 'Successfully unfollowed community',
       success: true,
       communityId: communityId
@@ -441,9 +565,9 @@ export const removeModerator = async (req, res) => {
 export const getAllCommunities = async (req, res) => {
   try {
     const { search } = req.query;
-    
+
     let query = {};
-    
+
     // Add search functionality
     if (search && search.trim()) {
       const searchRegex = { $regex: search.trim(), $options: 'i' };
@@ -452,12 +576,31 @@ export const getAllCommunities = async (req, res) => {
         { description: searchRegex }
       ];
     }
-    
+
     const communities = await Community.find(query)
       .sort({ createdAt: -1 });
 
+    // Mask sensitive data for private communities
+    const maskedCommunities = communities.map(c => {
+      if (c.visible === 'private') {
+        return {
+          _id: c._id,
+          community_name: c.community_name,
+          description: c.description,
+          image: c.image,
+          visible: c.visible,
+          no_of_followers: c.no_of_followers,
+          no_of_posts: c.no_of_posts,
+          community_tags: c.community_tags,
+          user_id: c.user_id,
+          isPrivateAndNotJoined: true
+        };
+      }
+      return c;
+    });
+
     res.json({
-      communities: communities,
+      communities: maskedCommunities,
     });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
@@ -470,14 +613,14 @@ export const getUserCommunities = async (req, res) => {
     // Accept both userId (route param) and user_id (query/body) for flexibility
     const user_id = req.params.userId || req.params.user_id || req.body?.user_id || req.body?.userId || req.query?.user_id;
     const { search } = req.query;
-    
+
     if (!user_id) {
       return res.status(400).json({ message: 'User ID is required' });
     }
-    
+
     let query = { user_id: user_id }; // Fixed: use user_id for database query
     let memberQuery = { members: user_id };
-    
+
     // Add search functionality
     if (search && search.trim()) {
       const searchRegex = { $regex: search.trim(), $options: 'i' };
@@ -485,14 +628,14 @@ export const getUserCommunities = async (req, res) => {
         { community_name: searchRegex },
         { description: searchRegex }
       ];
-      
+
       query.$or = searchCondition;
       memberQuery.$and = [
         { members: user_id },
         { $or: searchCondition }
       ];
     }
-    
+
     const ownedCommunities = await Community.find(query).sort({ createdAt: -1 });
     const followedCommunities = await Community.find(memberQuery).sort({ createdAt: -1 });
 
@@ -529,7 +672,7 @@ export const addPostToCommunity = async (req, res) => {
     const isFollower = community.members.includes(user_id);
 
     let canPost = false;
-    
+
     switch (community.moderation) {
       case 'only admin':
         canPost = isAdmin;
@@ -555,7 +698,7 @@ export const addPostToCommunity = async (req, res) => {
 
     // Add post ID to posts array and increment post count
     const updatedCommunity = await Community.findByIdAndUpdate(
-      communityId, 
+      communityId,
       {
         $push: { posts: postId },
         $inc: { no_of_posts: 1 }
@@ -570,7 +713,7 @@ export const addPostToCommunity = async (req, res) => {
       totalPostsInArray: updatedCommunity.posts.length
     });
 
-    res.json({ 
+    res.json({
       message: 'Post added to community successfully',
       success: true,
       community: {
@@ -640,7 +783,7 @@ export const removePostFromCommunity = async (req, res) => {
       totalPostsInArray: updatedCommunity.posts.length
     });
 
-    res.json({ 
+    res.json({
       message: 'Post removed from community successfully',
       success: true,
       community: {
@@ -664,6 +807,17 @@ export const getCommunityPosts = async (req, res) => {
     const community = await Community.findById(communityId);
     if (!community) {
       return res.status(404).json({ message: 'Community not found' });
+    }
+
+    const userId = req.query.user_id;
+
+    if (community.visible === 'private') {
+      const isMember = community.members.includes(userId);
+      const isAdmin = community.user_id === userId;
+
+      if (!isMember && !isAdmin) {
+        return res.status(403).json({ message: 'This community is private. You must be a member to view posts.' });
+      }
     }
 
     // Return the posts array with pagination info
@@ -699,5 +853,149 @@ export const getCommunityLite = async (req, res) => {
     return res.json({ ok: true, community: { _id: doc._id, community_tags: doc.community_tags || [] } });
   } catch (error) {
     return res.status(500).json({ ok: false, error: error.message });
+  }
+};
+
+// == Get Join Requests (Admin Only)
+export const getJoinRequests = async (req, res) => {
+  try {
+    const { communityId } = req.params;
+    const { user_id } = req.query; // Requester (Admin)
+
+    const community = await Community.findById(communityId);
+    if (!community) return res.status(404).json({ message: 'Community not found' });
+
+    // Auth Check
+    if (community.user_id !== user_id) {
+      return res.status(403).json({ message: 'Only admin can view join requests' });
+    }
+
+    // We need to fetch user details for the requests.
+    // Since user data is in another service (Auth/Cache), we might return just IDs 
+    // OR if we have a way to fetch profiles. 
+    // For now, let's return IDs and let frontend fetch profiles (or if we have a cache helper).
+    // BUT, usually we want names.
+    // In `subscriber.js` we see `notificationCacheModel`. Maybe we can use that if accessible?
+    // But this is community-service.
+    // Let's just return the IDs for now, and the Frontend can fetch user details using `getUser` or similar.
+
+    res.json({ requests: community.joinRequests || [] });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// == Respond to Join Request
+export const respondToJoinRequest = async (req, res) => {
+  try {
+    const { communityId } = req.params;
+    const { user_id, requesterId, action } = req.body; // action: 'accept' or 'decline'
+
+    const community = await Community.findById(communityId);
+    if (!community) return res.status(404).json({ message: 'Community not found' });
+
+    // Auth Check
+    if (community.user_id.toString() !== user_id.toString()) {
+      return res.status(403).json({ message: 'Only admin can manage requests' });
+    }
+
+    console.log('🔍 [COMMUNITY] Join Request Check Start');
+    console.log('   requesterId:', requesterId, `(${typeof requesterId})`);
+    console.log('   communityId:', communityId);
+    console.log('   joinRequests array:', JSON.stringify(community.joinRequests));
+
+    if (community.joinRequests) {
+      community.joinRequests.forEach((reqId, index) => {
+        // Robust comparison with null checks
+        const match = reqId && requesterId && reqId.toString() === requesterId.toString();
+        console.log(`   [${index}] Comparison: "${reqId}" === "${requesterId}" -> ${match}`);
+      });
+    }
+
+    // Fixed robust filter with null check
+    const isRequestInList = community.joinRequests.some(id =>
+      id && requesterId && id.toString() === requesterId.toString()
+    );
+
+    const isAlreadyMember = community.members?.some(m => m && m.toString() === requesterId.toString());
+
+    console.log('🔍 [COMMUNITY] Check results:', { isRequestInList, isAlreadyMember });
+
+    if (!isRequestInList) {
+      if (action === 'accept' && isAlreadyMember) {
+        console.log('✅ [COMMUNITY] User already a member, returning success for accept action');
+        return res.json({ success: true, message: 'User is already a member' });
+      }
+      console.log('❌ [COMMUNITY] Request not found for:', requesterId);
+      return res.status(404).json({ message: 'Request not found' });
+    }
+
+    if (action === 'accept') {
+      await Community.findByIdAndUpdate(communityId, {
+        $pull: { joinRequests: requesterId.toString() },
+        $push: { members: requesterId.toString() },
+        $inc: { no_of_followers: 1 }
+      });
+
+      // Notification to User
+      if (pub) {
+        const notificationPayload = {
+          receiverId: requesterId.toString(),
+          senderId: community.user_id.toString(), // Admin
+          triggerType: 'request_approved',
+          entityType: 'community',
+          entityId: community._id.toString(),
+          communityName: community.community_name,
+          triggerId: `${requesterId}-${community._id}-approve`, // Unique trigger ID
+          message: `approved your request to join ${community.community_name}`,
+          navigate: `/community/${community._id}`
+        };
+
+        console.log("📢 [COMMUNITY] Publishing request_approved notification:", notificationPayload);
+        try {
+          await pub.publish("notification:event", JSON.stringify({ notificationPayload }));
+          console.log("✅ [COMMUNITY] Published successfully to notification:event");
+        } catch (err) {
+          console.error("❌ [COMMUNITY] Failed to publish notification:", err.message);
+        }
+      } else {
+        console.warn("⚠️ [COMMUNITY] Redis publisher (pub) is not initialized!");
+      }
+    } else if (action === 'decline') {
+      // Use explicit pull to ensure it works even if types are slightly mismatched in memory
+      await Community.findByIdAndUpdate(communityId, {
+        $pull: { joinRequests: requesterId.toString() }
+      });
+
+      // Notification to User about decline (to clear status on frontend)
+      if (pub) {
+        const notificationPayload = {
+          receiverId: requesterId.toString(),
+          senderId: community.user_id.toString(), // Admin
+          triggerType: 'request_declined',
+          entityType: 'community',
+          entityId: community._id.toString(),
+          communityName: community.community_name,
+          triggerId: `${requesterId}-${community._id}-decline`, // Unique trigger ID
+          message: `declined your request to join ${community.community_name}`,
+          navigate: `/community/${community._id}`
+        };
+
+        console.log("📢 [COMMUNITY] Publishing request_declined notification:", notificationPayload);
+        try {
+          await pub.publish("notification:event", JSON.stringify({ notificationPayload }));
+          console.log("✅ [COMMUNITY] Published successfully to notification:event");
+        } catch (err) {
+          console.error("❌ [COMMUNITY] Failed to publish notification:", err.message);
+        }
+      }
+    } else {
+      return res.status(400).json({ message: 'Invalid action' });
+    }
+
+    res.json({ success: true, message: `Request ${action}ed` });
+
+  } catch (error) {
+    res.status(500).json({ message: error.message });
   }
 };

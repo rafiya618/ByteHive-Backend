@@ -53,9 +53,9 @@ export const createPost = async (req, res) => {
           activity_type: 'post',
           post_id: post._id.toString()
         },
-        { 
+        {
           headers: { Authorization: req.headers.authorization },
-          timeout: 5000 
+          timeout: 5000
         }
       );
       console.log('[POST] Post activity logged for badge tracking');
@@ -109,6 +109,7 @@ export const getPostById = async (req, res) => {
   try {
     const post = await Post.findById(req.params.id);
     if (!post) return res.status(404).json({ ok: false, error: "Not found" });
+
     res.json({ ok: true, post });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });

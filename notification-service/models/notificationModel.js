@@ -4,12 +4,12 @@ const notificationSchema = new mongoose.Schema(
   {
     // --- Users ---
     receiverId: { type: String, ref: "User", required: true },
-    senderId: { type: String, ref: "User", default: null },
+    senderId: { type: String, ref: "notificationCache", default: null },
 
     // --- Trigger/Event ---
     triggerType: {
       type: String,
-      enum: ["comment", "reply", "likeComment",  "aggregate", "system", "security"]
+      enum: ["comment", "reply", "likeComment", "likePost", "mention", "follow", "friendRequest", "connectionAccepted", "join_request", "request_approved", "community_follow", "newPost", "storyUpdate", "liveStream", "eventInvite", "streak_warning", "system", "security", "aggregate"]
     },
     // triggerId: { type: String }, // Optional if aggregated; otherwise used as fallback
 
@@ -21,9 +21,10 @@ const notificationSchema = new mongoose.Schema(
     entityId: { type: String }, // could be commentId, profileId, etc.
     entityType: {
       type: String,
-      enum: ["post", "comment", "reply", "user", "system", "security"]
+      enum: ["post", "comment", "reply", "user", "community", "system", "security"]
     },
-    parentId: {type: String},
+    communityName: { type: String },
+    parentId: { type: String },
 
     // --- Navigation Payload ---
     navigate: { type: String },
@@ -60,8 +61,20 @@ const notificationSchema = new mongoose.Schema(
     // --- Expiry ---
     isStale: { type: Boolean, default: false }
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true }
+  }
 );
+
+// Virtual for sender details to avoid overwriting raw senderId string
+notificationSchema.virtual('senderDetails', {
+  ref: 'notificationCache',
+  localField: 'senderId',
+  foreignField: '_id',
+  justOne: true
+});
 
 // Optional indexes (keep if needed)
 // notificationSchema.index({ receiverId: 1, status: 1 });
