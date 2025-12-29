@@ -1,5 +1,5 @@
 import express from 'express';
-import { 
+import {
   createCommunity,
   updateCommunity,
   deleteCommunity,
@@ -12,7 +12,9 @@ import {
   removeModerator,
   getUserCommunities,
   getAllCommunities,
-  getCommunityLite
+  getCommunityLite,
+  getJoinRequests,
+  respondToJoinRequest
 } from '../controllers/communityController.js';
 import { upload } from '../config/cloudinary.js';
 import { addPostToCommunity, removePostFromCommunity } from '../controllers/communityController.js';
@@ -41,6 +43,10 @@ router.patch('/:communityId/settings', updateCommunitySettings);
 // Moderator Management
 router.post('/:communityId/moderators', addModerator);
 router.delete('/:communityId/moderators/:userId', removeModerator);
+
+// Join Requests
+router.get('/:communityId/requests', getJoinRequests);
+router.post('/:communityId/requests', respondToJoinRequest);
 
 // Add/Remove Posts to/from Community
 router.post('/:communityId/posts', addPostToCommunity);

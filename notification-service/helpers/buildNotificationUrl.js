@@ -13,7 +13,7 @@ export function buildNotificationUrl(notification) {
       }
     }
   } else if (notification.meta?.triggerIds) {
-     console.log('entered in obejct')
+    console.log('entered in obejct')
     // If it's accidentally stored as plain object
     const firstKey = Object.keys(notification.meta.triggerIds)[0];
     triggerId = notification.meta.triggerIds[firstKey]?.[0];
@@ -44,6 +44,12 @@ export function buildNotificationUrl(notification) {
 
     case "security":
       return `/security/${notification.entityId || ""}`;
+
+    case "join_request":
+      return `/community/${notification.entityId || notification.communityId}`;
+
+    case "request_approved":
+      return `/community/${notification.entityId || notification.communityId}`;
 
     default:
       return "/"; // fallback

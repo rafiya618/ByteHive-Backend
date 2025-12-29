@@ -8,7 +8,7 @@ import notificationCacheModel from "./models/notificationCacheModel.js";
 import Subscription from "./models/subscriptionModel.js";
 import { sendPush } from "./helpers/push.js";
 import { buildNotificationUrl } from "./helpers/buildNotificationUrl.js";
-import { updateAggregation } from "./helpers/aggregateNotification.js";
+import { updateAggregation, buildAggregatedMessage } from "./helpers/aggregateNotification.js";
 import { cascadeDeletion } from "./helpers/cascadeDeletion.js";
 import { notificationCopy } from "./helpers/notificationCopy.js";
 
@@ -31,7 +31,9 @@ const defaultPrefs = {
     network: {
       follow: { inApp: true, push: false, email: false },
       friendRequest: { inApp: true, push: false, email: false },
-      connectionAccepted: { inApp: true, push: false, email: false }
+      connectionAccepted: { inApp: true, push: false, email: false },
+      joinRequest: { inApp: true, push: true, email: false },
+      joinApproved: { inApp: true, push: true, email: false }
     },
     updates: {
       newPost: { inApp: true, push: true, email: false },
@@ -58,6 +60,8 @@ function getPerTypePreference(prefs, triggerType) {
     follow: "network.follow",
     friendRequest: "network.friendRequest",
     connectionAccepted: "network.connectionAccepted",
+    join_request: "network.joinRequest",
+    request_approved: "network.joinApproved",
     newPost: "updates.newPost",
     storyUpdate: "updates.storyUpdate",
     liveStream: "updates.liveStream",
@@ -151,14 +155,19 @@ await sub.subscribe("userCache:events", async (message) => {
 await sub.subscribe("notification:event", async (message) => {
   try {
     const { notificationPayload: payload } = JSON.parse(message);
+    console.log("📥 [NOTIFICATION SUBSCRIBER] Received notification:event:", payload);
 
     if (payload.entityType === "security" || payload.entityType === "system") {
+      console.log("🛡️ [NOTIFICATION SUBSCRIBER] Handling security/system notification");
       await sendEmail(payload.receiverEmail, payload.entityType, payload.message);
       return;
     }
 
     // Avoid notifying self
-    if (payload.receiverId === payload.senderId) return;
+    if (payload.receiverId === payload.senderId) {
+      console.log("🛑 [NOTIFICATION SUBSCRIBER] Skipping: sender is receiver");
+      return;
+    }
 
     // Preferences
     let prefs = await Preference.findOne({ userId: payload.receiverId }) || defaultPrefs;
@@ -180,12 +189,14 @@ await sub.subscribe("notification:event", async (message) => {
     });
 
     const sender = await notificationCacheModel.findById(payload.senderId);
+    const actorName = (sender?.username?.trim()) || "Someone";
+    const triggerId = payload.triggerId || `${payload.senderId}-${payload.entityId}-${Date.now()}`;
 
     // -----------------------------------------------------
     //   UPDATE AGGREGATED NOTIFICATION
     // -----------------------------------------------------
     if (existing) {
-      updateAggregation(existing, sender.username, payload.triggerType, "add", payload.triggerId);
+      updateAggregation(existing, actorName, payload.triggerType, "add", triggerId);
       existing.navigate = buildNotificationUrl(existing);
       existing.channels = allowedChannels;
 
@@ -204,8 +215,8 @@ await sub.subscribe("notification:event", async (message) => {
     // -----------------------------------------------------
     const meta = {
       count: 1,
-      lastActors: [sender.username],
-      triggerIds: new Map([[sender.username, [payload.triggerId]]])
+      lastActors: [actorName],
+      triggerIds: new Map([[actorName, [triggerId]]])
     };
 
     const notificationData = {
@@ -215,6 +226,8 @@ await sub.subscribe("notification:event", async (message) => {
       meta,
     };
 
+    // Use refined message formatting even for the first notification
+    notificationData.message = buildAggregatedMessage(payload.triggerType, [actorName], 1, notificationData);
     notificationData.navigate = buildNotificationUrl(notificationData);
 
     const notification = await notificationModel.create(notificationData);
@@ -249,7 +262,9 @@ await sub.subscribe("notification:event", async (message) => {
     if (allowedChannels.includes("email")) {
       const { subject, body } = buildEmailContent(notification);
       const user = await notificationCacheModel.findById(payload.receiverId);
-      await sendEmail(user.email, subject, body);
+      if (user && user.email) {
+        await sendEmail(user.email, subject, body);
+      }
     }
 
   } catch (err) {
