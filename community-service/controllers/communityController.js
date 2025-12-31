@@ -90,6 +90,7 @@ const normalizeCommunityTags = (tags) => {
 export const createCommunity = async (req, res) => {
   try {
     const { community_name, description, visible, moderation, user_id } = req.body;
+    const owner_username = req.body.owner_username || req.body.username || req.body.user_name || req.body.name || '';
     const communityTags = normalizeCommunityTags(req.body['community_tags[]'] || req.body.community_tags);
 
     const existingCommunity = await Community.findOne({ community_name });
@@ -100,7 +101,10 @@ export const createCommunity = async (req, res) => {
     const communityData = {
       community_name,
       description,
-      user_id: user_id, // Fixed: use user_id for database
+      user_id: user_id,
+      // Set both fields for compatibility; owner_username is preferred
+      owner_username,
+      owner_name: owner_username,
       community_tags: communityTags,
       visible: visible || 'public',
       moderation: moderation || 'only admin',
@@ -136,7 +140,7 @@ export const createCommunity = async (req, res) => {
 export const updateCommunity = async (req, res) => {
   try {
     const { communityId } = req.params;
-    const { community_name, description, visible, moderation, user_id } = req.body;
+    const { community_name, description, visible, moderation, user_id, owner_username, owner_name } = req.body;
     const communityTags = normalizeCommunityTags(req.body['community_tags[]'] || req.body.community_tags);
 
     const community = await Community.findById(communityId);
@@ -162,6 +166,14 @@ export const updateCommunity = async (req, res) => {
     if (community_name) updateData.community_name = community_name;
     if (description) updateData.description = description;
     if (communityTags.length > 0) updateData.community_tags = communityTags;
+    // Prefer owner_username; if only owner_name provided, map to both
+    if (owner_username) {
+      updateData.owner_username = owner_username;
+      updateData.owner_name = owner_username;
+    } else if (owner_name) {
+      updateData.owner_username = owner_name;
+      updateData.owner_name = owner_name;
+    }
     if (visible) updateData.visible = visible;
     if (moderation) updateData.moderation = moderation;
 
