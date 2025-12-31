@@ -22,6 +22,7 @@ const communitySchema = new mongoose.Schema({
     default: 'public',
   },
   user_id: { type: String, required: true },
+  owner_username: { type: String, default: '' },
   members: [{
     type: String,
   }],

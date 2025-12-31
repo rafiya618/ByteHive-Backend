@@ -48,6 +48,7 @@ const PostSchema = new mongoose.Schema(
 
     comments: { type: Number, default: 0 },
     user_id: { type: String, required: true },
+    author_username: { type: String, default: "Anonymous" },
     date: { type: Date, default: Date.now },
 
     read_time: { type: Number },
@@ -64,7 +65,37 @@ const PostSchema = new mongoose.Schema(
       default: "pending_review"
     },
 
-    qa: { type: QASchema, default: () => ({}) }   // ✅ merged QA block
+    qa: { type: QASchema, default: () => ({}) },   // ✅ merged QA block
+
+    // Content Moderation Fields
+    report_count: { type: Number, default: 0 },
+    is_reported: { type: Boolean, default: false },
+    
+    moderation_status: {
+      type: String,
+      enum: ["active", "removed", "deleted"],
+      default: "active"
+    },
+
+    is_visible: { type: Boolean, default: true },
+
+    moderation_history: [
+      {
+        action: { type: String, enum: ["removed", "deleted", "approved"] },
+        admin_id: { type: String },
+        reason: { type: String },
+        notes: { type: String },
+        timestamp: { type: Date, default: Date.now }
+      }
+    ],
+
+    reported_by_users: [
+      {
+        user_id: { type: String },
+        reason: { type: String },
+        reported_at: { type: Date, default: Date.now }
+      }
+    ]
   },
   { timestamps: true }
 );

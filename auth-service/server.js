@@ -8,6 +8,8 @@ import http from "http";
 import passport from "./config/passport.js";
 import authRoute from "./routes/authRoutes.js";
 import profileRoute from "./routes/profileRoutes.js";
+import adminUserRoute from "./routes/adminUserRoutes.js";
+import moderationRoute from "./routes/moderationRoutes.js";
 import connectDB from "./config/db.js";
 // import "./controllers/haha.js"
 
@@ -24,7 +26,9 @@ app.use(passport.initialize());
 
 // Routes
 app.use("/auth", authRoute);
+app.use("/admin", adminUserRoute);
 app.use("/profile", profileRoute);
+app.use("/api/users", moderationRoute); // Moderation routes (warn, suspend, unsuspend)
 
 app.get("/", (req, res) => {
   res.send("Server running successfully");

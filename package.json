@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "start": "concurrently \"cd ./auth-service && npm run server\" \"cd ./comment-service && npm run server\" \"cd ./gateway && npm run server\" \"cd ./notification-service && npm run server\" \"cd ./posts-service && npm run server\" \"cd ./community-service && npm run server\" \"cd ./chatting-service && npm run server\" \"cd ./videocalling-service && npm run server\" \"cd ./retention-service && npm start\" \"cd ./curation-service && npm run server\" \"cd ./smart-reading-service && npm start\" \"cd ./RE-service && npm start\"",
+    "start": "concurrently \"cd ./auth-service && npm run server\" \"cd ./comment-service && npm run server\" \"cd ./gateway && npm run server\" \"cd ./notification-service && npm run server\" \"cd ./posts-service && npm run server\" \"cd ./community-service && npm run server\" \"cd ./chatting-service && npm run server\" \"cd ./videocalling-service && npm run server\" \"cd ./retention-service && npm start\" \"cd ./curation-service && npm run server\" \"cd ./smart-reading-service && npm start\" \"cd ./RE-service && npm start\" \"cd ./admin-service && npm run server\"",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

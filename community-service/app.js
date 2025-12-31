@@ -3,6 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import connectDB from './config/database.js';
 import communityRoutes from './routes/communityRoutes.js';
+import adminCommunityRoutes from './routes/adminCommunityRoutes.js';
 
 dotenv.config();
 
@@ -18,6 +19,7 @@ app.use(express.urlencoded({ extended: true }));
 
 // Routes
 app.use('/api/communities', communityRoutes);
+app.use('/api/admin/communities', adminCommunityRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

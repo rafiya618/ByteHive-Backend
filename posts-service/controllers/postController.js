@@ -13,6 +13,7 @@ export const createPost = async (req, res) => {
       tags = [],
       community,
       user_id,
+      author_username,
       thumbnail,
       mediaInputs = [] // array of base64 strings or URLs
     } = req.body;
@@ -25,6 +26,7 @@ export const createPost = async (req, res) => {
       tags,
       community,
       user_id,
+      author_username: author_username || "Anonymous",
       thumbnail: thumbnail || null,
       media: { inputs: Array.isArray(mediaInputs) ? mediaInputs : [] },
       status: "pending_review"
