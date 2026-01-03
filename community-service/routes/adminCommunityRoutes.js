@@ -11,7 +11,7 @@ import {
 
 const router = express.Router();
 
-// router.use(adminAuth);
+router.use(adminAuth);
 
 router.get('/', listCommunitiesAdmin);
 router.get('/:communityId/posts', getCommunityPostsAdmin);

@@ -10,7 +10,7 @@ import { verifyAdmin } from '../middleware/authMiddleware.js';
 const router = express.Router();
 
 // Only admins can access these routes
-// router.use(verifyAdmin);
+router.use(verifyAdmin);
 
 router.get('/users', getUsers);
 router.put('/users/:id/block', toggleBlockUser);

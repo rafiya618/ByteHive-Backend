@@ -1,6 +1,7 @@
 import Post from '../models/Post.js';
 import axios from 'axios';
-
+import { createRedisClients } from "../../shared-config/redisClient.js";
+const { pub } = await createRedisClients();
 const safeNumber = (value, fallback) => {
   const n = parseInt(value, 10);
   return Number.isNaN(n) ? fallback : n;
@@ -264,7 +265,12 @@ export const deletePostAdmin = async (req, res) => {
     } catch (notifyErr) {
       console.warn('Failed to send deletion notification:', notifyErr.message);
     }
-
+    await pub.publish(
+      "dashboard:stats",
+      JSON.stringify({
+        type: "post_deleted" // or user_deleted, post_created, etc.
+      })
+    );
     return res.json({
       ok: true,
       message: 'Post deleted successfully',

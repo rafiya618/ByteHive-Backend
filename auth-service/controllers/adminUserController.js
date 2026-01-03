@@ -1,4 +1,6 @@
 import { userModel } from '../models/userModel.js';
+import { createRedisClients } from "../../shared-config/redisClient.js";
+const { pub } = await createRedisClients();
 
 // GET /admin/users?cursor=&limit=&search=&role=&status=
 export const getUsers = async (req, res) => {
@@ -76,6 +78,12 @@ export const deleteUser = async (req, res) => {
     const user = await userModel.findByIdAndDelete(id);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
+    await pub.publish(
+      "dashboard:stats",
+      JSON.stringify({
+        type: "user_deleted" // or user_deleted, post_created, etc.
+      })
+    );
     res.json({ message: 'User deleted successfully', user });
   } catch (err) {
     console.error(err);
