@@ -1,6 +1,8 @@
 import Community from '../models/Community.js';
 import { cloudinary } from '../config/cloudinary.js';
 import axios from 'axios';
+import { createRedisClients } from "../../shared-config/redisClient.js";
+const { pub } = await createRedisClients();
 
 const HOST = process.env.HOST || 'http://localhost';
 const POSTS_SERVICE_URL = `${HOST}:${process.env.POSTS_PORT || 5000}`;
@@ -220,6 +222,12 @@ export const deleteCommunityAdmin = async (req, res) => {
     await deleteImageIfNeeded(community.image);
     await Community.deleteOne({ _id: communityId });
 
+    await pub.publish(
+      "dashboard:stats",
+      JSON.stringify({
+        type: "community_deleted" // or user_deleted, post_created, etc.
+      })
+    );
     return res.json({ ok: true, message: 'Community deleted' });
   } catch (err) {
     return res.status(500).json({ ok: false, message: 'Server error', error: err.message });

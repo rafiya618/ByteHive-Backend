@@ -114,6 +114,12 @@ export const setupProfile = async (req, res) => {
       JSON.stringify({ notificationPayload })
     );
 
+    await pub.publish(
+      "dashboard:stats",
+      JSON.stringify({
+        type: "user_created" // or user_deleted, post_created, etc.
+      })
+    );
     res.status(201).json({
       success: true,
       message: "Profile created successfully",

@@ -126,6 +126,12 @@ export const createCommunity = async (req, res) => {
     const community = new Community(communityData);
     await community.save();
 
+    await pub.publish(
+      "dashboard:stats",
+      JSON.stringify({
+        type: "community_created" // or user_deleted, post_created, etc.
+      })
+    );
     res.status(201).json({
       message: 'Community created successfully',
       community,
@@ -226,6 +232,12 @@ export const deleteCommunity = async (req, res) => {
 
     await Community.findByIdAndDelete(communityId);
 
+    await pub.publish(
+      "dashboard:stats",
+      JSON.stringify({
+        type: "community_deleted" // or user_deleted, post_created, etc.
+      })
+    );
     res.json({ message: 'Community deleted successfully' });
   } catch (error) {
     console.error('Delete community error:', error);

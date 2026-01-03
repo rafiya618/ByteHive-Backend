@@ -15,7 +15,7 @@ import {
 const router = express.Router();
 
 // Apply admin auth middleware to all routes
-// router.use(adminAuth);
+router.use(adminAuth);
 
 /**
  * 4.1 - List all posts with filters and pagination

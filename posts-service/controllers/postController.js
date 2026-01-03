@@ -1,7 +1,9 @@
 import Post from "../models/Post.js";
 import { queues } from "../config/redis.js";
+import { createRedisClients } from "../../shared-config/redisClient.js";
 import axios from "axios";
 
+const { pub } = await createRedisClients();
 // CREATE — fast, enqueue heavy work
 export const createPost = async (req, res) => {
   try {
@@ -64,6 +66,12 @@ export const createPost = async (req, res) => {
     } catch (activityError) {
       console.warn('[POST] Failed to log post activity (non-blocking):', activityError.message);
     }
+    await pub.publish(
+      "dashboard:stats",
+      JSON.stringify({
+        type: "post_created" // or user_deleted, post_created, etc.
+      })
+    );
 
     return res.status(201).json({
       ok: true,
@@ -166,6 +174,12 @@ export const deletePost = async (req, res) => {
     const deleted = await Post.findByIdAndDelete(req.params.id);
     if (!deleted) return res.status(404).json({ ok: false, error: "Not found" });
     // Optionally: enqueue a job to delete Cloudinary assets (not implemented here)
+    await pub.publish(
+      "dashboard:stats",
+      JSON.stringify({
+        type: "post_deleted" // or user_deleted, post_created, etc.
+      })
+    );
     res.json({ ok: true, message: "Post deleted" });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });

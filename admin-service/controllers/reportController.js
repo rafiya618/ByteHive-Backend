@@ -1,4 +1,5 @@
 import Report from "../models/Report.js";
+import DashboardStats from "../models/DashboardStats.js";
 import axios from "axios";
 
 const HOST = process.env.HOST || "http://localhost";
@@ -14,9 +15,9 @@ export const submitReport = async (req, res) => {
 
     // Validate input
     if (!reporterId || !targetType || !targetId || !reason) {
-      return res.status(400).json({ 
-        ok: false, 
-        message: "Missing required fields: reporterId, targetType, targetId, reason" 
+      return res.status(400).json({
+        ok: false,
+        message: "Missing required fields: reporterId, targetType, targetId, reason"
       });
     }
 
@@ -98,6 +99,11 @@ export const submitReport = async (req, res) => {
     } catch (err) {
       console.log("Failed to notify admin:", err.message);
     }
+    await DashboardStats.findOneAndUpdate(
+      {},
+      { $inc: { totalReports: 1 } },
+      { upsert: true }
+    );
 
     return res.status(201).json({
       ok: true,
@@ -106,10 +112,10 @@ export const submitReport = async (req, res) => {
     });
   } catch (err) {
     console.error("Report submission error:", err);
-    return res.status(500).json({ 
-      ok: false, 
-      message: "Server error", 
-      error: err.message 
+    return res.status(500).json({
+      ok: false,
+      message: "Server error",
+      error: err.message
     });
   }
 };
@@ -150,10 +156,10 @@ export const getReports = async (req, res) => {
     });
   } catch (err) {
     console.error("Get reports error:", err);
-    return res.status(500).json({ 
-      ok: false, 
-      message: "Server error", 
-      error: err.message 
+    return res.status(500).json({
+      ok: false,
+      message: "Server error",
+      error: err.message
     });
   }
 };
@@ -233,10 +239,10 @@ export const getReportDetails = async (req, res) => {
     });
   } catch (err) {
     console.error("Get report details error:", err);
-    return res.status(500).json({ 
-      ok: false, 
-      message: "Server error", 
-      error: err.message 
+    return res.status(500).json({
+      ok: false,
+      message: "Server error",
+      error: err.message
     });
   }
 };
@@ -318,10 +324,10 @@ export const takeReportAction = async (req, res) => {
     });
   } catch (err) {
     console.error("Take report action error:", err);
-    return res.status(500).json({ 
-      ok: false, 
-      message: "Server error", 
-      error: err.message 
+    return res.status(500).json({
+      ok: false,
+      message: "Server error",
+      error: err.message
     });
   }
 };
@@ -508,10 +514,10 @@ async function sendModerationNotifications(report, action, adminId) {
         type: "content_moderated",
         title: "Moderation Action",
         message: messageMap[action],
-        data: { 
+        data: {
           reportId: report._id,
           targetId: report.targetId,
-          reason: report.reason 
+          reason: report.reason
         }
       });
     }
@@ -553,10 +559,10 @@ export const getReportStats = async (req, res) => {
     });
   } catch (err) {
     console.error("Get report stats error:", err);
-    return res.status(500).json({ 
-      ok: false, 
-      message: "Server error", 
-      error: err.message 
+    return res.status(500).json({
+      ok: false,
+      message: "Server error",
+      error: err.message
     });
   }
 };
