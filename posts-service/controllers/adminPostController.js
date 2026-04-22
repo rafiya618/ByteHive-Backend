@@ -1,7 +1,23 @@
 import Post from '../models/Post.js';
-import axios from 'axios';
 import { createRedisClients } from "../../shared-config/redisClient.js";
 const { pub } = await createRedisClients();
+
+const getAdminId = (req) => req.user?.id || req.user?._id || req.user?.userId || 'admin-system';
+
+const publishAdminPostNotification = async ({ receiverId, senderId, post, message }) => {
+  const notificationPayload = {
+    receiverId: receiverId?.toString(),
+    senderId: senderId?.toString(),
+    triggerType: 'admin_action',
+    triggerId: `admin-post-${post._id}-${Date.now()}`,
+    entityType: 'post',
+    entityId: post._id.toString(),
+    postId: post._id.toString(),
+    message,
+  };
+
+  await pub.publish('notification:event', JSON.stringify({ notificationPayload }));
+};
 const safeNumber = (value, fallback) => {
   const n = parseInt(value, 10);
   return Number.isNaN(n) ? fallback : n;
@@ -148,6 +164,7 @@ export const getPostDetailsAdmin = async (req, res) => {
 export const approvePost = async (req, res) => {
   try {
     const { postId } = req.params;
+    const adminId = getAdminId(req);
 
     const post = await Post.findById(postId);
     if (!post) {
@@ -161,22 +178,12 @@ export const approvePost = async (req, res) => {
     post.status = 'approved';
     await post.save();
 
-    // Optionally notify user
-    try {
-      const notificationUrl = process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:5003';
-      await axios.post(
-        `${notificationUrl}/api/notifications`,
-        {
-          user_id: post.user_id,
-          notification_type: 'post_approved',
-          post_id: post._id.toString(),
-          message: `Your post "${post.post_title}" has been approved!`
-        },
-        { timeout: 5000 }
-      );
-    } catch (notifyErr) {
-      console.warn('Failed to send approval notification:', notifyErr.message);
-    }
+    await publishAdminPostNotification({
+      receiverId: post.user_id,
+      senderId: adminId,
+      post,
+      message: `Your post "${post.post_title}" has been approved by an admin.`,
+    });
 
     return res.json({
       ok: true,
@@ -196,6 +203,7 @@ export const rejectPost = async (req, res) => {
   try {
     const { postId } = req.params;
     const { reason } = req.body;
+    const adminId = getAdminId(req);
 
     const post = await Post.findById(postId);
     if (!post) {
@@ -209,22 +217,12 @@ export const rejectPost = async (req, res) => {
     post.status = 'rejected';
     await post.save();
 
-    // Optionally notify user with rejection reason
-    try {
-      const notificationUrl = process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:5003';
-      await axios.post(
-        `${notificationUrl}/api/notifications`,
-        {
-          user_id: post.user_id,
-          notification_type: 'post_rejected',
-          post_id: post._id.toString(),
-          message: `Your post "${post.post_title}" was rejected. Reason: ${reason || 'Content does not meet guidelines.'}`
-        },
-        { timeout: 5000 }
-      );
-    } catch (notifyErr) {
-      console.warn('Failed to send rejection notification:', notifyErr.message);
-    }
+    await publishAdminPostNotification({
+      receiverId: post.user_id,
+      senderId: adminId,
+      post,
+      message: `Your post "${post.post_title}" was rejected. Reason: ${reason || 'Content does not meet guidelines.'}`,
+    });
 
     return res.json({
       ok: true,
@@ -243,28 +241,19 @@ export const rejectPost = async (req, res) => {
 export const deletePostAdmin = async (req, res) => {
   try {
     const { postId } = req.params;
+    const adminId = getAdminId(req);
 
     const post = await Post.findByIdAndDelete(postId);
     if (!post) {
       return res.status(404).json({ ok: false, message: 'Post not found' });
     }
 
-    // Optionally notify user of deletion
-    try {
-      const notificationUrl = process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:5003';
-      await axios.post(
-        `${notificationUrl}/api/notifications`,
-        {
-          user_id: post.user_id,
-          notification_type: 'post_deleted',
-          post_id: post._id.toString(),
-          message: `Your post "${post.post_title}" has been deleted by admin.`
-        },
-        { timeout: 5000 }
-      );
-    } catch (notifyErr) {
-      console.warn('Failed to send deletion notification:', notifyErr.message);
-    }
+    await publishAdminPostNotification({
+      receiverId: post.user_id,
+      senderId: adminId,
+      post,
+      message: `Your post "${post.post_title}" has been deleted by an admin.`,
+    });
     await pub.publish(
       "dashboard:stats",
       JSON.stringify({
@@ -289,6 +278,7 @@ export const editPostAdmin = async (req, res) => {
   try {
     const { postId } = req.params;
     const { post_title, post_description, small_description } = req.body;
+    const adminId = getAdminId(req);
 
     const post = await Post.findById(postId);
     if (!post) {
@@ -307,6 +297,13 @@ export const editPostAdmin = async (req, res) => {
     }
 
     await post.save();
+
+    await publishAdminPostNotification({
+      receiverId: post.user_id,
+      senderId: adminId,
+      post,
+      message: `Your post "${post.post_title}" was edited by an admin.`,
+    });
 
     return res.json({
       ok: true,

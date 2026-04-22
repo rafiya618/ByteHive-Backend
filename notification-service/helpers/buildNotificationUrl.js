@@ -36,6 +36,9 @@ export function buildNotificationUrl(notification) {
     case "likeComment":
       return `/post/${notification.postId}?triggerId=${triggerId}&isAggregated=${isAggregated}`;
 
+    case "newPost":
+      return `/post/${notification.postId || notification.entityId}`;
+
     case "profile":
       return `/profile/${notification.entityId}`;
 
@@ -44,6 +47,9 @@ export function buildNotificationUrl(notification) {
 
     case "security":
       return `/security/${notification.entityId || ""}`;
+
+    case "admin_action":
+      return "/notifications";
 
     case "join_request":
       return `/community/${notification.entityId || notification.communityId}`;

@@ -3,11 +3,19 @@ import mongoose from "mongoose";
 import cors from "cors";
 import { createServer } from "http";
 import { Server } from "socket.io";
+import dotenv from "dotenv";
+import path from "path";
+import { fileURLToPath } from "url";
 
 import roomRoutes from "./routes/roomRoutes.js";
 import threadRoutes from "./routes/threadRoutes.js";
 import messageRoutes from "./routes/messageRoutes.js";
 import chatSocket from "./sockets/chatSocket.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+dotenv.config();
+dotenv.config({ path: path.join(__dirname, "../shared-config/.env") });
 
 const app = express();
 const server = createServer(app);
@@ -26,7 +34,12 @@ app.use("/api/rooms", roomRoutes);
 app.use("/api/threads", threadRoutes);
 app.use("/api/messages", messageRoutes);
 
-mongoose.connect("mongodb+srv://rafiamalik787:DXeBg0sPDCEStAhQ@bytehive.xqmy3.mongodb.net/?retryWrites=true&w=majority&appName=ByteHive")
+const mongoUri =
+  process.env.MONGODB_URI ||
+  process.env.MONGO_URL ||
+  "mongodb://rafiamalik787:DXeBg0sPDCEStAhQ@bytehive-shard-00-00.xqmy3.mongodb.net:27017,bytehive-shard-00-01.xqmy3.mongodb.net:27017,bytehive-shard-00-02.xqmy3.mongodb.net:27017/?ssl=true&replicaSet=atlas-ntyda5-shard-0&authSource=admin&retryWrites=true&w=majority&appName=ByteHive";
+
+mongoose.connect(mongoUri)
   .then(() => console.log("MongoDB connected"))
   .catch(err => console.log("MongoDB error:", err));
 

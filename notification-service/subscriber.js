@@ -163,8 +163,8 @@ await sub.subscribe("notification:event", async (message) => {
       return;
     }
 
-    // Avoid notifying self
-    if (payload.receiverId === payload.senderId) {
+    // Avoid notifying self for social events, but keep admin_action alerts.
+    if (payload.receiverId === payload.senderId && payload.triggerType !== "admin_action") {
       console.log("🛑 [NOTIFICATION SUBSCRIBER] Skipping: sender is receiver");
       return;
     }
@@ -177,6 +177,11 @@ await sub.subscribe("notification:event", async (message) => {
     if (prefs.global.inApp && perType.inApp) allowedChannels.push("in-app");
     if (prefs.global.push && perType.push) allowedChannels.push("push");
     if (prefs.global.email && perType.email) allowedChannels.push("email");
+
+    // Admin account actions should always send an email alert.
+    if (payload.triggerType === "admin_action" && !allowedChannels.includes("email")) {
+      allowedChannels.push("email");
+    }
 
     if (!allowedChannels.includes("in-app")) allowedChannels.push("in-app");
 
@@ -262,8 +267,11 @@ await sub.subscribe("notification:event", async (message) => {
     if (allowedChannels.includes("email")) {
       const { subject, body } = buildEmailContent(notification);
       const user = await notificationCacheModel.findById(payload.receiverId);
-      if (user && user.email) {
-        await sendEmail(user.email, subject, body);
+      const recipientEmail = payload.receiverEmail || user?.email;
+      if (recipientEmail) {
+        await sendEmail(recipientEmail, subject, body);
+      } else {
+        console.warn("⚠️ [NOTIFICATION SUBSCRIBER] Missing recipient email for", payload.receiverId);
       }
     }
 

@@ -4,6 +4,104 @@ import { createRedisClients } from "../../shared-config/redisClient.js";
 import axios from "axios";
 
 const { pub } = await createRedisClients();
+
+async function notifyCommunityFollowersForNewPost(post) {
+  try {
+    if (!post?.community) return;
+
+    const communityServiceUrl = process.env.COMMUNITY_SERVICE_URL || "http://localhost:5001";
+    const rawCommunityRef = String(post.community || "").trim();
+    const isMongoId = /^[a-fA-F0-9]{24}$/.test(rawCommunityRef);
+
+    let communityId = isMongoId ? rawCommunityRef : null;
+
+    // Frontend currently sends community name in create payload.
+    // Resolve name -> _id so we can fetch full community details with members.
+    if (!communityId) {
+      try {
+        const listRes = await axios.get(
+          `${communityServiceUrl}/api/communities/all`,
+          { timeout: 5000 }
+        );
+
+        const communities = Array.isArray(listRes.data?.communities) ? listRes.data.communities : [];
+        const matched = communities.find(
+          (c) => String(c?.community_name || "").toLowerCase() === rawCommunityRef.toLowerCase()
+        );
+
+        communityId = matched?._id?.toString() || null;
+      } catch (resolveErr) {
+        console.warn("[POST] Failed to resolve community by name for notifications:", resolveErr.message);
+      }
+    }
+
+    if (!communityId) {
+      console.warn(`[POST] Skipping newPost notifications: unable to resolve community '${rawCommunityRef}'`);
+      return;
+    }
+
+    let communityRes;
+    try {
+      communityRes = await axios.get(
+        `${communityServiceUrl}/api/communities/${communityId}`,
+        {
+          params: { user_id: post.user_id },
+          timeout: 5000
+        }
+      );
+    } catch (primaryErr) {
+      // Backward-compatible fallback if service is mounted differently in some environments.
+      communityRes = await axios.get(
+        `${communityServiceUrl}/communities/${communityId}`,
+        {
+          params: { user_id: post.user_id },
+          timeout: 5000
+        }
+      );
+    }
+
+    const community = communityRes.data?.community;
+    const members = Array.isArray(community?.members) ? community.members : [];
+    if (!members.length) {
+      console.log(`[POST] No members found for community ${communityId}; skipping newPost notifications`);
+      return;
+    }
+
+    const authorId = post.user_id?.toString();
+    const followerIds = members
+      .map((memberId) => memberId?.toString())
+      .filter((memberId) => memberId && memberId !== authorId);
+
+    if (!followerIds.length) return;
+
+    console.log(`[POST] Notifying ${followerIds.length} followers about new post ${post._id}`);
+
+    const authorName = post.author_username || "A creator you follow";
+    const communityName = community?.community_name || "the community";
+    const message = `${authorName} published a new post in ${communityName}.`;
+
+    await Promise.all(
+      followerIds.map((receiverId) => {
+        const notificationPayload = {
+          receiverId,
+          senderId: authorId,
+          triggerType: "newPost",
+          triggerId: `new-post-${post._id}-${receiverId}-${Date.now()}`,
+          entityType: "post",
+          entityId: post._id.toString(),
+          postId: post._id.toString(),
+          communityName,
+          message,
+        };
+
+        return pub.publish("notification:event", JSON.stringify({ notificationPayload }));
+      })
+    );
+  } catch (err) {
+    console.warn("[POST] Failed to notify followers for new post (non-blocking):", err.message);
+  }
+}
+
 // CREATE — fast, enqueue heavy work
 export const createPost = async (req, res) => {
   try {
@@ -66,6 +164,10 @@ export const createPost = async (req, res) => {
     } catch (activityError) {
       console.warn('[POST] Failed to log post activity (non-blocking):', activityError.message);
     }
+
+    // Notify community followers about the new post (non-blocking)
+    await notifyCommunityFollowersForNewPost(post);
+
     await pub.publish(
       "dashboard:stats",
       JSON.stringify({
@@ -373,13 +475,16 @@ export const likePost = async (req, res) => {
     const normalizedUserId = String(user_id);
 
     // Check current state to determine toggle action
-    const post = await Post.findById(id).select('upvotes downvotes');
+    const post = await Post.findById(id).select('upvotes downvotes user_id post_title');
     if (!post) {
       return res.status(404).json({ ok: false, error: "Post not found" });
     }
 
     const alreadyLiked = post.upvotes.includes(normalizedUserId);
     const alreadyDisliked = post.downvotes.includes(normalizedUserId);
+
+    const postOwnerId = post.user_id?.toString();
+    const likeTriggerId = `like-post-${id}-${normalizedUserId}`;
 
     // Use atomic operations to prevent race conditions
     let update;
@@ -399,6 +504,34 @@ export const likePost = async (req, res) => {
 
     // Apply atomic update and get updated document
     const updatedPost = await Post.findByIdAndUpdate(id, update, { new: true }).select('upvotes downvotes');
+
+    // Keep notifications consistent with like toggle behavior.
+    if (postOwnerId && postOwnerId !== normalizedUserId) {
+      if (!alreadyLiked) {
+        const notificationPayload = {
+          receiverId: postOwnerId,
+          senderId: normalizedUserId,
+          triggerType: "likePost",
+          triggerId: likeTriggerId,
+          entityType: "post",
+          entityId: id,
+          postId: id,
+          message: "liked your post",
+        };
+
+        await pub.publish("notification:event", JSON.stringify({ notificationPayload }));
+      } else {
+        const payload = {
+          receiverId: postOwnerId,
+          entityId: id,
+          triggerType: "likePost",
+          commentId: likeTriggerId,
+          entityType: "post"
+        };
+
+        await pub.publish("notification:delete", JSON.stringify({ payload }));
+      }
+    }
 
     res.json({
       ok: true,
