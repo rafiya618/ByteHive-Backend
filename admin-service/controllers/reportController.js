@@ -1,11 +1,13 @@
 import Report from "../models/Report.js";
 import DashboardStats from "../models/DashboardStats.js";
 import axios from "axios";
+import { createRedisClients } from "../../shared-config/redisClient.js";
+
+const { pub } = await createRedisClients();
 
 const HOST = process.env.HOST || "http://localhost";
 const POSTS_SERVICE_URL = `${HOST}:5000`;
 const AUTH_SERVICE_URL = `${HOST}:${process.env.AUTH_PORT || 3000}`;
-const NOTIFICATION_SERVICE_URL = `${HOST}:${process.env.NOTIFICATION_PORT || 3002}`;
 const COMMENT_SERVICE_URL = `${HOST}:${process.env.COMMENT_PORT || 3001}`;
 
 // SUBMIT REPORT - User reports a post/comment/user/community
@@ -82,23 +84,8 @@ export const submitReport = async (req, res) => {
       }
     }
 
-    // Notify admin (non-blocking)
-    try {
-      await axios.post(`${NOTIFICATION_SERVICE_URL}/api/notifications`, {
-        recipientType: "admin",
-        type: "new_report",
-        title: "New Report Submitted",
-        message: `${targetType} reported for: ${reason}`,
-        data: {
-          reportId: report._id,
-          targetType,
-          targetId,
-          targetTitle
-        }
-      }).catch(err => console.log("Notification service error:", err.message));
-    } catch (err) {
-      console.log("Failed to notify admin:", err.message);
-    }
+    // NOTE: Notification-service does not expose a POST endpoint for this payload.
+    // Keep report submission independent and avoid noisy 404 logs.
     await DashboardStats.findOneAndUpdate(
       {},
       { $inc: { totalReports: 1 } },
@@ -481,39 +468,60 @@ async function warnUser(report, adminId) {
 async function sendModerationNotifications(report, action, adminId) {
   try {
     const notifications = [];
+    const reporterRecipientId = report.reporterId?.toString();
+    const targetRecipientId = (report.targetAuthorId || (report.targetType === "user" ? report.targetId : ""))?.toString();
+    const targetTypeLabel = {
+      post: "post",
+      comment: "comment",
+      user: "account",
+      community: "community"
+    }[report.targetType] || "content";
+    const reportReason = (report.reason || "policy_violation").replace(/_/g, " ");
 
     // Notify reporter
     if (action === "approved") {
       notifications.push({
-        recipientId: report.reporterId,
-        type: "report_approved",
-        title: "Report Reviewed",
-        message: "Your report was reviewed. The content is deemed safe.",
+        recipientId: reporterRecipientId,
+        message: `Update on your report: No violation was found for the reported ${targetTypeLabel}.`,
+        entityType: report.targetType,
+        entityId: report.targetId,
+        postId: report.targetType === "post" ? report.targetId : undefined,
         data: { reportId: report._id }
       });
-    } else if (["removed", "deleted", "user_banned"].includes(action)) {
+    } else if (["removed", "deleted", "user_banned", "user_warned"].includes(action)) {
+      const reporterActionMap = {
+        removed: `Update on your report: The reported ${targetTypeLabel} was removed for ${reportReason}.`,
+        deleted: `Update on your report: The reported ${targetTypeLabel} was permanently deleted for ${reportReason}.`,
+        user_banned: `Update on your report: The reported user account was suspended after review for ${reportReason}.`,
+        user_warned: `Update on your report: The reported user received an official warning for ${reportReason}.`
+      };
+
       notifications.push({
-        recipientId: report.reporterId,
-        type: "report_resolved",
-        title: "Report Resolved",
-        message: `Action taken: ${action.replace(/_/g, " ")}`,
+        recipientId: reporterRecipientId,
+        message: reporterActionMap[action],
+        entityType: report.targetType,
+        entityId: report.targetId,
+        postId: report.targetType === "post" ? report.targetId : undefined,
         data: { reportId: report._id }
       });
     }
 
     // Notify author
-    if (["removed", "deleted", "user_banned"].includes(action)) {
+    if (["approved", "removed", "deleted", "user_banned", "user_warned"].includes(action)) {
       const messageMap = {
-        removed: "Your post has been removed due to community guidelines violation.",
-        deleted: "Your post has been permanently deleted due to serious violation.",
-        user_banned: "Your account has been suspended due to repeated violations."
+        approved: `Moderation review complete: The report against your ${targetTypeLabel} was closed with no violation found.`,
+        removed: `Moderation action: Your ${targetTypeLabel} was removed for ${reportReason}.`,
+        deleted: `Moderation action: Your ${targetTypeLabel} was permanently deleted for ${reportReason}.`,
+        user_banned: `Moderation action: Your account has been suspended after review for ${reportReason}.`,
+        user_warned: `Moderation action: Your account has received an official warning for ${reportReason}.`
       };
 
       notifications.push({
-        recipientId: report.targetAuthorId,
-        type: "content_moderated",
-        title: "Moderation Action",
+        recipientId: targetRecipientId,
         message: messageMap[action],
+        entityType: report.targetType,
+        entityId: report.targetId || report.targetAuthorId,
+        postId: report.targetType === "post" ? report.targetId : undefined,
         data: {
           reportId: report._id,
           targetId: report.targetId,
@@ -522,10 +530,24 @@ async function sendModerationNotifications(report, action, adminId) {
       });
     }
 
-    // Send all notifications
     for (const notification of notifications) {
-      await axios.post(`${NOTIFICATION_SERVICE_URL}/api/notifications`, notification)
-        .catch(err => console.log("Notification error:", err.message));
+      if (!notification.recipientId) {
+        console.warn(`Skipping moderation notification: missing recipient for action ${action}, report ${report._id}`);
+        continue;
+      }
+
+      const notificationPayload = {
+        receiverId: notification.recipientId?.toString(),
+        senderId: (adminId || "admin-system").toString(),
+        triggerType: "admin_action",
+        triggerId: `report-${report._id}-${action}-${Date.now()}`,
+        entityType: notification.entityType,
+        entityId: notification.entityId?.toString() || `report-${report._id}`,
+        postId: notification.postId?.toString(),
+        message: notification.message,
+      };
+
+      await pub.publish("notification:event", JSON.stringify({ notificationPayload }));
     }
   } catch (err) {
     console.log("Failed to send notifications:", err.message);

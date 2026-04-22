@@ -63,9 +63,9 @@ export const notificationCopy = {
 
   // ===== UPDATES =====
   newPost: {
-    subject: () => "New post from your network",
-    headline: () => "Someone shared a new post",
-    body: () => "Check out what’s new."
+    subject: (actor) => `${actor} published a new post`,
+    headline: (actor) => `${actor} published a new post`,
+    body: () => "Open ByteHive to read the latest post from your community feed."
   },
 
   storyUpdate: {

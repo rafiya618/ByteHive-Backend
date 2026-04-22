@@ -27,6 +27,35 @@ export const GoogleLogin = async (req, res) => {
   try {
     if (!req.user) return sendError(res, 400, "system", "User authentication failed.");
 
+    // Fetch full user data to check suspension/block status
+    const user = await userModel.findById(req.user._id);
+    if (!user) return sendError(res, 404, "system", "User not found.");
+
+    // Check if user is suspended
+    if (user.isSuspended) {
+      // Check if suspension is temporary and has expired
+      if (user.suspendedUntil && new Date() > new Date(user.suspendedUntil)) {
+        // Lift temporary suspension
+        user.isSuspended = false;
+        user.suspendedUntil = null;
+        user.suspensionReason = '';
+        await user.save();
+      } else {
+        // Still suspended (or permanent ban)
+        const suspensionMessage = encodeURIComponent(
+          user.suspendedUntil
+            ? `Your account is temporarily suspended until ${new Date(user.suspendedUntil).toLocaleDateString()}. Reason: ${user.suspensionReason || 'Policy violation'}`
+            : `Your account has been permanently suspended. Reason: ${user.suspensionReason || 'Policy violation'}`
+        );
+        return res.redirect(`${process.env.FRONTEND_URL}/google-auth?error=suspended&message=${suspensionMessage}`);
+      }
+    }
+
+    // Check if user is blocked
+    if (user.status === "blocked") {
+      return res.redirect(`${process.env.FRONTEND_URL}/google-auth?error=blocked&message=${encodeURIComponent('Your account has been blocked.')}`);
+    }
+
     const token = generateToken(req.user);
 
     // Pass optional info.message for frontend toast
@@ -59,6 +88,29 @@ export const Login = async (req, res) => {
     const isMatch = await comparePassword(password, user.password);
     if (!isMatch) {
       return sendError(res, 401, "password", "Invalid Password!");
+    }
+
+    // Check if user is suspended
+    if (user.isSuspended) {
+      // Check if suspension is temporary and has expired
+      if (user.suspendedUntil && new Date() > new Date(user.suspendedUntil)) {
+        // Lift temporary suspension
+        user.isSuspended = false;
+        user.suspendedUntil = null;
+        user.suspensionReason = '';
+        await user.save();
+      } else {
+        // Still suspended (or permanent ban)
+        const suspensionMessage = user.suspendedUntil
+          ? `Your account is temporarily suspended until ${new Date(user.suspendedUntil).toLocaleDateString()}. Reason: ${user.suspensionReason || 'Policy violation'}`
+          : `Your account has been permanently suspended. Reason: ${user.suspensionReason || 'Policy violation'}`;
+        return sendError(res, 403, "account", suspensionMessage);
+      }
+    }
+
+    // Check if user is blocked
+    if (user.status === "blocked") {
+      return sendError(res, 403, "account", "Your account has been blocked.");
     }
 
     const token = generateToken(user);

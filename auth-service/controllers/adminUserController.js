@@ -2,6 +2,23 @@ import { userModel } from '../models/userModel.js';
 import { createRedisClients } from "../../shared-config/redisClient.js";
 const { pub } = await createRedisClients();
 
+const getAdminId = (req) => req.user?.id || req.user?._id || req.user?.userId || 'admin-system';
+
+const publishAdminNotification = async ({ receiverId, senderId, message, entityId, receiverEmail }) => {
+  const notificationPayload = {
+    receiverId: receiverId?.toString(),
+    senderId: senderId?.toString(),
+    triggerType: 'admin_action',
+    triggerId: `admin-action-${Date.now()}`,
+    entityType: 'user',
+    entityId: entityId?.toString() || receiverId?.toString(),
+    receiverEmail,
+    message,
+  };
+
+  await pub.publish('notification:event', JSON.stringify({ notificationPayload }));
+};
+
 // GET /admin/users?cursor=&limit=&search=&role=&status=
 export const getUsers = async (req, res) => {
   try {
@@ -41,11 +58,38 @@ export const getUsers = async (req, res) => {
 export const toggleBlockUser = async (req, res) => {
   try {
     const { id } = req.params;
+    const adminId = getAdminId(req);
     const user = await userModel.findById(id);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
-    user.status = user.status === 'active' ? 'blocked' : 'active';
+    const isUnblocking = user.status === 'blocked';
+    user.status = isUnblocking ? 'active' : 'blocked';
+
+    // Keep moderation flags consistent with block/unblock actions.
+    if (isUnblocking) {
+      user.isSuspended = false;
+      user.suspendedUntil = null;
+      user.suspensionReason = '';
+      user.moderationHistory.push({
+        action: 'unbanned',
+        admin_id: adminId,
+        reason: 'Unblocked from admin users page',
+        timestamp: new Date()
+      });
+    }
+
     await user.save();
+
+    const isBlocked = user.status === 'blocked';
+    await publishAdminNotification({
+      receiverId: user._id,
+      senderId: adminId,
+      entityId: user._id,
+      receiverEmail: user.email,
+      message: isBlocked
+        ? 'Your account has been blocked by an admin.'
+        : 'Your account has been unblocked by an admin.',
+    });
 
     res.json({ message: `User is now ${user.status}`, user });
   } catch (err) {
@@ -58,13 +102,28 @@ export const toggleBlockUser = async (req, res) => {
 export const promoteUser = async (req, res) => {
   try {
     const { id } = req.params;
+    const adminId = getAdminId(req);
     const user = await userModel.findById(id);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
-    user.role = 'admin';
+    const isPromoting = user.role !== 'admin';
+    user.role = isPromoting ? 'admin' : 'user';
     await user.save();
 
-    res.json({ message: 'User promoted to admin', user });
+    await publishAdminNotification({
+      receiverId: user._id,
+      senderId: adminId,
+      entityId: user._id,
+      receiverEmail: user.email,
+      message: isPromoting
+        ? 'You have been promoted to admin.'
+        : 'Your admin role has been revoked.',
+    });
+
+    res.json({
+      message: isPromoting ? 'User promoted to admin' : 'User demoted to user',
+      user,
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Server error' });
@@ -75,8 +134,19 @@ export const promoteUser = async (req, res) => {
 export const deleteUser = async (req, res) => {
   try {
     const { id } = req.params;
-    const user = await userModel.findByIdAndDelete(id);
+    const adminId = getAdminId(req);
+    const user = await userModel.findById(id);
     if (!user) return res.status(404).json({ message: 'User not found' });
+
+    await publishAdminNotification({
+      receiverId: user._id,
+      senderId: adminId,
+      entityId: user._id,
+      receiverEmail: user.email,
+      message: 'Your account has been deleted by an admin.',
+    });
+
+    await user.deleteOne();
 
     await pub.publish(
       "dashboard:stats",
