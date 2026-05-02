@@ -4,12 +4,15 @@ import { createRedisClients } from "../../shared-config/redisClient.js";
 import axios from "axios";
 
 const { pub } = await createRedisClients();
+const HOST = process.env.HOST || "http://localhost";
 
 async function notifyCommunityFollowersForNewPost(post) {
   try {
     if (!post?.community) return;
 
-    const communityServiceUrl = process.env.COMMUNITY_SERVICE_URL || "http://localhost:5001";
+    const communityServiceUrl =
+      process.env.COMMUNITY_SERVICE_URL ||
+      `${HOST}:${process.env.COMMUNITY_SERVICE_PORT || process.env.COMMUNITY_PORT || 5001}`;
     const rawCommunityRef = String(post.community || "").trim();
     const isMongoId = /^[a-fA-F0-9]{24}$/.test(rawCommunityRef);
 
@@ -147,7 +150,9 @@ export const createPost = async (req, res) => {
 
     // Log post creation activity for badge tracking (non-blocking)
     try {
-      const retentionUrl = process.env.RETENTION_SERVICE_URL || 'http://localhost:5005';
+      const retentionUrl =
+        process.env.RETENTION_SERVICE_URL ||
+        `${HOST}:${process.env.RETENTION_SERVICE_PORT || process.env.RETENTION_PORT || 5005}`;
       await axios.post(
         `${retentionUrl}/api/activity/log`,
         {
@@ -193,7 +198,7 @@ export const getPosts = async (req, res) => {
 
     const query = {};
     if (req.query.category) query.category = req.query.category;
-    if (req.query.user_id) query.user_id = Number(req.query.user_id);
+    if (req.query.user_id) query.user_id = String(req.query.user_id).trim();
     if (req.query.community) query.community = req.query.community;
     if (req.query.status) query.status = req.query.status;
 

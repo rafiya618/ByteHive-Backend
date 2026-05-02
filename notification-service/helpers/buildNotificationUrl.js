@@ -43,6 +43,12 @@ export function buildNotificationUrl(notification) {
       return `/profile/${notification.entityId}`;
 
     case "system":
+      if (typeof notification.entityId === "string" && notification.entityId.startsWith("announcement-")) {
+        return `/system/announcement/${notification.entityId.replace(/^announcement-/, "")}`;
+      }
+      if (notification.data?.announcementId) {
+        return `/system/announcement/${notification.data.announcementId}`;
+      }
       return `/system/${notification.entityId || ""}`;
 
     case "security":

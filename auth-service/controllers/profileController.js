@@ -78,10 +78,15 @@ export const setupProfile = async (req, res) => {
     const profile = new Profile({ user: userId, name, username });
     await profile.save();
 
-    // ✅ Update user onboarding step
+    // ✅ Update user core fields used by admin dashboards/search
     const user = await userModel.findByIdAndUpdate(
       userId,
-      { onboardingStep: 4 },
+      {
+        onboardingStep: 4,
+        name: profile.name,
+        username: profile.username,
+        profileImage: profile.profileImage,
+      },
       { new: true }
     );
 
@@ -163,6 +168,15 @@ export const updateProfile = async (req, res) => {
       if (existingUsername) {
         return res.status(400).json({ success: false, field: "username", message: "Username already taken" });
       }
+
+      // Keep User collection consistent as admin dashboard/search reads from it.
+      const existingUserUsername = await userModel.findOne({
+        username: updates.username,
+        _id: { $ne: req.params.userId },
+      });
+      if (existingUserUsername) {
+        return res.status(400).json({ success: false, field: "username", message: "Username already taken" });
+      }
     }
 
     // ✅ Validate bio if present
@@ -227,7 +241,15 @@ export const updateProfile = async (req, res) => {
     const changed = relevantFields.some((field) => updates[field]);
 
     if (changed) {
-      const user = await userModel.findById(req.params.userId).select("email");
+      const user = await userModel.findByIdAndUpdate(
+        req.params.userId,
+        {
+          ...(updates.name ? { name: profile.name } : {}),
+          ...(updates.username ? { username: profile.username } : {}),
+          ...(updates.profileImage ? { profileImage: profile.profileImage } : {}),
+        },
+        { new: true }
+      ).select("email");
       console.log('user in updatted profile', user)
 
       // 🔹 Publish unified event

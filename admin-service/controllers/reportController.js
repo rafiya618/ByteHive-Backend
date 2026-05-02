@@ -6,9 +6,15 @@ import { createRedisClients } from "../../shared-config/redisClient.js";
 const { pub } = await createRedisClients();
 
 const HOST = process.env.HOST || "http://localhost";
-const POSTS_SERVICE_URL = `${HOST}:5000`;
-const AUTH_SERVICE_URL = `${HOST}:${process.env.AUTH_PORT || 3000}`;
-const COMMENT_SERVICE_URL = `${HOST}:${process.env.COMMENT_PORT || 3001}`;
+const POSTS_SERVICE_URL =
+  process.env.POSTS_SERVICE_URL ||
+  `${HOST}:${process.env.POSTS_SERVICE_PORT || process.env.POSTS_PORT || 5000}`;
+const AUTH_SERVICE_URL =
+  process.env.AUTH_SERVICE_URL ||
+  `${HOST}:${process.env.AUTH_SERVICE_PORT || process.env.AUTH_PORT || 3000}`;
+const COMMENT_SERVICE_URL =
+  process.env.COMMENT_SERVICE_URL ||
+  `${HOST}:${process.env.COMMENT_SERVICE_PORT || process.env.COMMENT_PORT || 3001}`;
 
 // SUBMIT REPORT - User reports a post/comment/user/community
 export const submitReport = async (req, res) => {

@@ -113,24 +113,92 @@ export const Login = async (req, res) => {
       return sendError(res, 403, "account", "Your account has been blocked.");
     }
 
-    const token = generateToken(user);
+    // Instead of issuing token immediately, require OTP verification for login
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + 60 * 1000);
 
-    await pub.publish(
-      "notification:event",
-      JSON.stringify({
-        notificationPayload: {
-          receiverEmail: email,
-          entityType: "system",
-          triggerType: "login",
-          message: `Some login in bytehive`,
-        },
-      })
+    await OTP.findOneAndUpdate(
+      { email },
+      { otp, expiresAt },
+      { upsert: true, new: true }
     );
 
-    res.json({ success: true, message: "Login successful!", token });
+    try {
+      await sendEmail(
+        email,
+        "ByteHive login verification code",
+        `<p>Your login verification code is: <b>${otp}</b>. It will expire in 60 seconds.</p>`
+      );
+    } catch (mailErr) {
+      console.error('Failed to send login OTP email:', mailErr?.message || mailErr);
+      return sendError(res, 502, 'email', 'Failed to deliver login OTP email.');
+    }
+
+    res.json({ success: true, otpRequired: true, message: "Login OTP sent to your email." });
   } catch (err) {
     console.error("Login Error:", err);
     sendError(res, 500, "system", "Something went wrong. Please try again.");
+  }
+};
+
+// Verify OTP for login and issue token
+export const verifyLoginOtp = async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+
+    const otpError = validateOtp(otp);
+    if (otpError) return sendError(res, 400, 'otp', otpError);
+
+    const validOTP = await OTP.findOne({ email });
+    if (!validOTP) return sendError(res, 400, 'otp', 'OTP not found');
+    if (validOTP.otp !== otp) return sendError(res, 400, 'otp', 'Invalid OTP');
+    if (validOTP.expiresAt < new Date()) return sendError(res, 400, 'otp', 'OTP expired');
+
+    const user = await userModel.findOne({ email });
+    if (!user) return sendError(res, 404, 'email', 'User not found');
+
+    // Check suspension / blocked status
+    if (user.isSuspended) {
+      if (user.suspendedUntil && new Date() > new Date(user.suspendedUntil)) {
+        user.isSuspended = false;
+        user.suspendedUntil = null;
+        user.suspensionReason = '';
+        await user.save();
+      } else {
+        const suspensionMessage = user.suspendedUntil
+          ? `Your account is temporarily suspended until ${new Date(user.suspendedUntil).toLocaleDateString()}. Reason: ${user.suspensionReason || 'Policy violation'}`
+          : `Your account has been permanently suspended. Reason: ${user.suspensionReason || 'Policy violation'}`;
+        return sendError(res, 403, 'account', suspensionMessage);
+      }
+    }
+
+    if (user.status === 'blocked') return sendError(res, 403, 'account', 'Your account has been blocked.');
+
+    // All good — delete OTP and issue token
+    await OTP.deleteOne({ email });
+    const token = generateToken(user);
+
+    // Publish security notification about successful login (async, non-blocking)
+    try {
+      await pub.publish(
+        "notification:event",
+        JSON.stringify({
+          notificationPayload: {
+            receiverEmail: email,
+            entityType: "security",
+            triggerType: "login",
+            message: `<p>Your ByteHive account was signed in on ${new Date().toLocaleString()}.</p><p>If this wasn't you, please reset your password immediately or contact support.</p>`,
+          },
+        })
+      );
+    } catch (e) {
+      console.warn('Could not publish login notification event after OTP verification:', e?.message || e);
+    }
+
+    res.json({ success: true, message: 'Login successful', token });
+  } catch (err) {
+    console.error('verifyLoginOtp error:', err);
+    sendError(res, 500, 'system', 'Something went wrong. Please try again.');
   }
 };
 
@@ -256,17 +324,16 @@ export const Register = async (req, res) => {
       { upsert: true, new: true }
     );
 
-    await pub.publish(
-      "notification:event",
-      JSON.stringify({
-        notificationPayload: {
-          receiverEmail: email,
-          entityType: "system",
-          triggerType: "register",
-          message: `<p>Your OTP is: <b>${otp}</b>. It will expire in 60 seconds.</p>`,
-        },
-      })
-    );
+    try {
+      await sendEmail(
+        email,
+        "ByteHive security verification code",
+        `<p>Your OTP is: <b>${otp}</b>. It will expire in 60 seconds.</p>`
+      );
+    } catch (mailErr) {
+      console.error('Failed to send OTP email:', mailErr?.message || mailErr);
+      return sendError(res, 502, 'email', 'Failed to deliver OTP email.');
+    }
 
     res.json({ success: true, message: "OTP sent to your email. Please verify." });
   } catch (error) {
@@ -294,17 +361,16 @@ export const resendOTP = async (req, res) => {
       { upsert: true, new: true }
     );
 
-    await pub.publish(
-      "notification:event",
-      JSON.stringify({
-        notificationPayload: {
-          receiverEmail: email,
-          entityType: "system",
-          triggerType: "password-reset",
-          message: `<p>Your new OTP is: <b>${otp}</b>. It will expire in 60 seconds.</p>`,
-        },
-      })
-    );
+    try {
+      await sendEmail(
+        email,
+        "ByteHive security verification code",
+        `<p>Your new OTP is: <b>${otp}</b>. It will expire in 60 seconds.</p>`
+      );
+    } catch (mailErr) {
+      console.error('Failed to resend OTP email:', mailErr?.message || mailErr);
+      return sendError(res, 502, 'email', 'Failed to deliver OTP email.');
+    }
 
     res.json({ success: true, message: "OTP resent successfully" });
   } catch (error) {

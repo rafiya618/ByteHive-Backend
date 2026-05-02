@@ -4,7 +4,7 @@ import mongoose from "mongoose";
 // 🔹 Base notification channel schema
 const channelSchema = new mongoose.Schema({
   inApp: { type: Boolean, default: true },   // in-app always ON by default
-  push: { type: Boolean, default: true },
+  push: { type: Boolean, default: false },
   email: { type: Boolean, default: false }
 }, { _id: false });
 
@@ -15,25 +15,17 @@ const perTypeSchema = new mongoose.Schema({
     likePost: { type: channelSchema, default: () => ({}) },
     likeComment: { type: channelSchema, default: () => ({}) },
     comment: { type: channelSchema, default: () => ({}) },
-    reply: { type: channelSchema, default: () => ({}) },
-    mention: { type: channelSchema, default: () => ({ push: true }) } // push ON by default
+    reply: { type: channelSchema, default: () => ({}) }
   },
 
   // 🟡 Network / Social graph events
   network: {
-    follow: { type: channelSchema, default: () => ({}) },
-    friendRequest: { type: channelSchema, default: () => ({}) },
-    connectionAccepted: { type: channelSchema, default: () => ({}) },
-    joinRequest: { type: channelSchema, default: () => ({}) },
-    joinApproved: { type: channelSchema, default: () => ({}) }
+    follow: { type: channelSchema, default: () => ({}) }
   },
 
   // 🔵 Content / Updates
   updates: {
     newPost: { type: channelSchema, default: () => ({}) },
-    storyUpdate: { type: channelSchema, default: () => ({}) },
-    liveStream: { type: channelSchema, default: () => ({}) },
-    eventInvite: { type: channelSchema, default: () => ({}) },
     streakReminder: {
       enabled: { type: Boolean, default: true },
       lastModified: { type: Date, default: Date.now }
@@ -42,8 +34,8 @@ const perTypeSchema = new mongoose.Schema({
 
   // 🔒 System updates (locked — cannot be changed by user)
   system: {
-    inApp: { type: Boolean, default: false, immutable: true },
-    push: { type: Boolean, default: false, immutable: true },
+    inApp: { type: Boolean, default: true, immutable: true },
+    push: { type: Boolean, default: true, immutable: true },
     email: { type: Boolean, default: true, immutable: true }
   },
 
@@ -62,7 +54,7 @@ const preferenceSchema = new mongoose.Schema({
   // 🌍 Global settings (apply to all categories)
   global: {
     inApp: { type: Boolean, default: true, immutable: true }, // cannot disable in-app globally
-    push: { type: Boolean, default: true },
+    push: { type: Boolean, default: false },
     email: { type: Boolean, default: false }
   },
 

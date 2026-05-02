@@ -12,7 +12,7 @@ import { updateAggregation, buildAggregatedMessage } from "./helpers/aggregateNo
 import { cascadeDeletion } from "./helpers/cascadeDeletion.js";
 import { notificationCopy } from "./helpers/notificationCopy.js";
 
-const { sub } = await createRedisClients();
+const { sub, pub } = await createRedisClients();
 const socket = io("http://localhost:4000");
 
 // -----------------------------------------------------
@@ -25,22 +25,14 @@ const defaultPrefs = {
       likePost: { inApp: true, push: true, email: false },
       likeComment: { inApp: true, push: true, email: false },
       comment: { inApp: true, push: true, email: false },
-      reply: { inApp: true, push: true, email: false },
-      mention: { inApp: true, push: true, email: false }
+      reply: { inApp: true, push: true, email: false }
     },
     network: {
-      follow: { inApp: true, push: false, email: false },
-      friendRequest: { inApp: true, push: false, email: false },
-      connectionAccepted: { inApp: true, push: false, email: false },
-      joinRequest: { inApp: true, push: true, email: false },
-      joinApproved: { inApp: true, push: true, email: false }
+      follow: { inApp: true, push: true, email: false }
     },
     updates: {
       newPost: { inApp: true, push: true, email: false },
-      storyUpdate: { inApp: true, push: false, email: false },
-      liveStream: { inApp: true, push: false, email: false },
-      eventInvite: { inApp: true, push: false, email: false },
-      streakReminder: { inApp: true, push: true, email: false } // ← INCLUDED AS REQUESTED
+      streakReminder: { inApp: true, push: true, email: false }
     },
     system: { inApp: false, push: false, email: true },
     security: { inApp: false, push: false, email: true }
@@ -56,17 +48,10 @@ function getPerTypePreference(prefs, triggerType) {
     likeComment: "activities.likeComment",
     comment: "activities.comment",
     reply: "activities.reply",
-    mention: "activities.mention",
     follow: "network.follow",
-    friendRequest: "network.friendRequest",
-    connectionAccepted: "network.connectionAccepted",
-    join_request: "network.joinRequest",
-    request_approved: "network.joinApproved",
     newPost: "updates.newPost",
-    storyUpdate: "updates.storyUpdate",
-    liveStream: "updates.liveStream",
-    eventInvite: "updates.eventInvite",
-    streak_warning: "updates.streakReminder", // ← INCLUDED
+    streak_warning: "updates.streakReminder",
+    admin_action: "system",
     system: "system",
     security: "security",
   };
@@ -157,7 +142,12 @@ await sub.subscribe("notification:event", async (message) => {
     const { notificationPayload: payload } = JSON.parse(message);
     console.log("📥 [NOTIFICATION SUBSCRIBER] Received notification:event:", payload);
 
-    if (payload.entityType === "security" || payload.entityType === "system") {
+    const forceChannels = Array.isArray(payload.forceChannels)
+      ? payload.forceChannels.filter(Boolean)
+      : [];
+    const hasForceChannels = forceChannels.length > 0;
+
+    if ((payload.entityType === "security" || payload.entityType === "system") && !hasForceChannels) {
       console.log("🛡️ [NOTIFICATION SUBSCRIBER] Handling security/system notification");
       await sendEmail(payload.receiverEmail, payload.entityType, payload.message);
       return;
@@ -177,6 +167,12 @@ await sub.subscribe("notification:event", async (message) => {
     if (prefs.global.inApp && perType.inApp) allowedChannels.push("in-app");
     if (prefs.global.push && perType.push) allowedChannels.push("push");
     if (prefs.global.email && perType.email) allowedChannels.push("email");
+
+    for (const channel of forceChannels) {
+      if (!allowedChannels.includes(channel)) {
+        allowedChannels.push(channel);
+      }
+    }
 
     // Admin account actions should always send an email alert.
     if (payload.triggerType === "admin_action" && !allowedChannels.includes("email")) {
@@ -247,13 +243,17 @@ await sub.subscribe("notification:event", async (message) => {
     // -----------------------------------------------------
     if (allowedChannels.includes("push")) {
       const subs = await Subscription.find({ userId: payload.receiverId });
+      const pushTitle = payload.triggerType === "system"
+        ? "ByteHive Announcement"
+        : "ByteHive Notification";
+      const pushBody = notificationData.message || payload.message || "You have a new update on ByteHive.";
 
       for (const sub of subs) {
         await sendPush(
           { endpoint: sub.endpoint, keys: sub.keys },
           JSON.stringify({
-            title: "New Notification",
-            body: payload.message,
+            title: pushTitle,
+            body: pushBody,
             url: notificationData.navigate,
             data: payload,
           })
@@ -334,27 +334,21 @@ await sub.subscribe("system_notification", async (message) => {
 
     if (!payload.receiverId) return;
 
-    const notification = await notificationModel.create({
+    const notificationPayload = {
       receiverId: payload.receiverId,
-      senderId: null,
+      receiverEmail: payload.receiverEmail,
+      senderId: "admin-system",
       triggerType: "system",
+      triggerId: `system-${payload.data?.announcementId || Date.now()}-${payload.receiverId}`,
       entityType: "system",
-      entityId: `system-${Date.now()}-${payload.receiverId}`,
+      entityId: `announcement-${payload.data?.announcementId || Date.now()}`,
       message: payload.message,
-      navigate: payload.data?.url || "/notifications",
-      channels: ["in-app"],
-      status: "unread",
-      meta: {
-        count: 1,
-        lastActors: ["System"],
-        triggerIds: new Map()
-      }
-    });
+      navigate: payload.data?.url || `/system/announcement/${payload.data?.announcementId || Date.now()}`,
+      forceChannels: ["in-app", "push", "email"],
+      data: payload.data || {}
+    };
 
-    socket.emit("forward:event", {
-      type: "notification:new",
-      data: notification
-    });
+    await pub.publish("notification:event", JSON.stringify({ notificationPayload }));
 
   } catch (err) {
     console.error("❌ [SYSTEM_NOTIFICATION] Error:", err);
