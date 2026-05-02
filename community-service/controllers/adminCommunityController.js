@@ -5,7 +5,9 @@ import { createRedisClients } from "../../shared-config/redisClient.js";
 const { pub } = await createRedisClients();
 
 const HOST = process.env.HOST || 'http://localhost';
-const POSTS_SERVICE_URL = `${HOST}:${process.env.POSTS_PORT || 5000}`;
+const POSTS_SERVICE_URL =
+  process.env.POSTS_SERVICE_URL ||
+  `${HOST}:${process.env.POSTS_SERVICE_PORT || process.env.POSTS_PORT || 5000}`;
 
 const safeNumber = (value, fallback) => {
   const n = parseInt(value, 10);

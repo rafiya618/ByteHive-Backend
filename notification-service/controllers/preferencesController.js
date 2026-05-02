@@ -11,7 +11,14 @@ const getRedisPub = async () => {
   return redisPub;
 };
 
-const userFacingTypes = ["comment", "reply", "mention", "like", "follow", "message", "joinRequest", "joinApproved"];
+// Only expose these per-type settings to the UI
+const exposedPerType = {
+  activities: ["likePost", "likeComment", "comment", "reply"],
+  network: ["follow"],
+  updates: ["newPost", "streakReminder"],
+  system: null,
+  security: null
+};
 
 export const getPreferences = async (req, res) => {
   try {
@@ -22,19 +29,33 @@ export const getPreferences = async (req, res) => {
       prefs = await Preferences.create({ userId });
     }
 
-    // Strip hidden types before sending to UI
+    // Strip internal/removed types before sending to UI
     const cleaned = prefs.toObject();
-    ["push", "email", "sms"].forEach((ch) => {
-      if (cleaned[ch] && cleaned[ch].types) {
-        const filtered = {};
-        userFacingTypes.forEach((t) => {
-          filtered[t] = cleaned[ch].types[t];
-        });
-        cleaned[ch].types = filtered;
+
+    const perType = cleaned.perType || {};
+    const filtered = { perType: {} };
+
+    Object.keys(exposedPerType).forEach((group) => {
+      if (exposedPerType[group] === null) {
+        // expose the whole locked group (system, security)
+        filtered.perType[group] = perType[group] || cleaned.perType?.[group] || {};
+        return;
       }
+
+      filtered.perType[group] = {};
+      exposedPerType[group].forEach((key) => {
+        if (perType[group] && perType[group][key] !== undefined) {
+          filtered.perType[group][key] = perType[group][key];
+        } else if (cleaned.perType && cleaned.perType[group] && cleaned.perType[group][key] !== undefined) {
+          filtered.perType[group][key] = cleaned.perType[group][key];
+        }
+      });
     });
 
-    res.json(cleaned);
+    // keep global settings
+    filtered.global = cleaned.global;
+
+    res.json(filtered);
   } catch (err) {
     res.status(500).json({ error: "Failed to load preferences" });
   }

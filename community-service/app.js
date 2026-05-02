@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import connectDB from './config/database.js';
 import communityRoutes from './routes/communityRoutes.js';
 import adminCommunityRoutes from './routes/adminCommunityRoutes.js';
+import './subscriber.js';
 
 dotenv.config();
 

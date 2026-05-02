@@ -33,7 +33,9 @@ app.get("/", (req, res) => {
 });
 
 // ✅ Start Express server
-const port = process.env.COMMENT_PORT || 3001;
-app.listen(port, () => {
-  console.log(`Server running on http://localhost:${port}`);
+const COMMENT_SERVICE_PORT =
+  process.env.COMMENT_SERVICE_PORT || process.env.COMMENT_PORT || 3001;
+
+app.listen(COMMENT_SERVICE_PORT, () => {
+  console.log(`Server running on http://localhost:${COMMENT_SERVICE_PORT}`);
 });

@@ -42,7 +42,9 @@ app.get("/", (req, res) => {
 });
 
 // Start Express server
-const port = process.env.AUTH_PORT || 3000;
-app.listen(port, () => {
-  console.log(`Server running on http://localhost:${port}`);
+const AUTH_SERVICE_PORT =
+  process.env.AUTH_SERVICE_PORT || process.env.AUTH_PORT || 3000;
+
+app.listen(AUTH_SERVICE_PORT, () => {
+  console.log(`Server running on http://localhost:${AUTH_SERVICE_PORT}`);
 });

@@ -9,6 +9,7 @@ import eventRoutes from "./routes/eventRoutes.js";
 import adminPostRoutes from "./routes/adminPostRoutes.js";
 import moderationRoutes from "./routes/moderationRoutes.js";
 import "./workers/qaWorker.js";
+import "./subscriber.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

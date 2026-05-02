@@ -11,6 +11,8 @@ import {
   resetPassword
 } from '../controllers/authController.js';
 
+import { verifyLoginOtp } from '../controllers/authController.js';
+
 const router = express.Router();
 
 // Google OAuth Login
@@ -59,5 +61,6 @@ router.post('/reset-password', resetPassword);
 router.post('/register', Register);
 router.post('/verify-otp', verifyOTPAndRegister);
 router.post('/resend-otp', resendOTP);
+router.post('/verify-login-otp', verifyLoginOtp);
 
 export default router;

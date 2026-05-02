@@ -5,9 +5,14 @@ import commentCacheModel from "../models/commentCacheModel.js";
 // import localCacheModel from "../../notification-service/models/notificationModel.js";
 
 const { pub } = await createRedisClients();
-const socket = io("http://localhost:4000");
 const HOST = process.env.HOST || "http://localhost";
-const POSTS_SERVICE_URL = process.env.POSTS_SERVICE_URL || `${HOST}:${process.env.POSTS_PORT || 5000}`;
+const SOCKET_GATEWAY_URL =
+  process.env.SOCKET_GATEWAY_URL ||
+  `${HOST}:${process.env.GATEWAY_SERVICE_PORT || process.env.GATEWAY_PORT || 4000}`;
+const socket = io(SOCKET_GATEWAY_URL);
+const POSTS_SERVICE_URL =
+  process.env.POSTS_SERVICE_URL ||
+  `${HOST}:${process.env.POSTS_SERVICE_PORT || process.env.POSTS_PORT || 5000}`;
 
 // helper to attach user details from cache
 const attachUserDetails = async (comments) => {
