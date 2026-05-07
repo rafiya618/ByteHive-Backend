@@ -36,14 +36,26 @@ export function buildNotificationUrl(notification) {
     case "likeComment":
       return `/post/${notification.postId}?triggerId=${triggerId}&isAggregated=${isAggregated}`;
 
+    case "newPost":
+      return `/post/${notification.postId || notification.entityId}`;
+
     case "profile":
       return `/profile/${notification.entityId}`;
 
     case "system":
+      if (typeof notification.entityId === "string" && notification.entityId.startsWith("announcement-")) {
+        return `/system/announcement/${notification.entityId.replace(/^announcement-/, "")}`;
+      }
+      if (notification.data?.announcementId) {
+        return `/system/announcement/${notification.data.announcementId}`;
+      }
       return `/system/${notification.entityId || ""}`;
 
     case "security":
       return `/security/${notification.entityId || ""}`;
+
+    case "admin_action":
+      return "/notifications";
 
     case "join_request":
       return `/community/${notification.entityId || notification.communityId}`;

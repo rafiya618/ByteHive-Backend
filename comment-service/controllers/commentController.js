@@ -5,7 +5,14 @@ import commentCacheModel from "../models/commentCacheModel.js";
 // import localCacheModel from "../../notification-service/models/notificationModel.js";
 
 const { pub } = await createRedisClients();
-const socket = io("http://localhost:4000");
+const HOST = process.env.HOST || "http://localhost";
+const SOCKET_GATEWAY_URL =
+  process.env.SOCKET_GATEWAY_URL ||
+  `${HOST}:${process.env.GATEWAY_SERVICE_PORT || process.env.GATEWAY_PORT || 4000}`;
+const socket = io(SOCKET_GATEWAY_URL);
+const POSTS_SERVICE_URL =
+  process.env.POSTS_SERVICE_URL ||
+  `${HOST}:${process.env.POSTS_SERVICE_PORT || process.env.POSTS_PORT || 5000}`;
 
 // helper to attach user details from cache
 const attachUserDetails = async (comments) => {
@@ -58,22 +65,46 @@ export const addComment = async (req, res) => {
         : null,
     };
 
-    const notificationPayload = {
-      receiverId,
-      // receiverName,
-      senderId: responseComment.user?._id,
-      // senderName: responseComment.user?.username,
-      triggerType: parentId ? "reply" : "comment",
-      triggerId: comment._id,
-      message: `${responseComment.user?.username} ${parentId ? "replied" : "commented"} on your ${parentId ? "comment" : "post"
-        }`,
-      entityId,
-      entityType: parentId ? "comment" : "post",
-      postId,
-    };
+    // Resolve notification receiver server-side for reliability.
+    // - reply => parent comment owner
+    // - top-level comment => post owner
+    let resolvedReceiverId = receiverId;
+
+    if (parentId) {
+      const parentComment = await commentModel.findById(parentId).select("userId");
+      resolvedReceiverId = parentComment?.userId?.toString() || resolvedReceiverId;
+    } else if (postId) {
+      try {
+        const postRes = await fetch(`${POSTS_SERVICE_URL}/api/posts/${postId}`);
+        const postData = await postRes.json().catch(() => ({}));
+        const postOwnerId = postData?.post?.user_id || postData?.user_id;
+        if (postOwnerId) resolvedReceiverId = String(postOwnerId);
+      } catch (postErr) {
+        console.warn("Failed to resolve post owner for comment notification:", postErr.message);
+      }
+    }
+
+    // Do not notify self or when receiver cannot be resolved.
+    const senderId = responseComment.user?._id?.toString();
+    const shouldNotify = resolvedReceiverId && senderId && resolvedReceiverId !== senderId;
+
+    const notificationPayload = shouldNotify
+      ? {
+          receiverId: resolvedReceiverId,
+          senderId,
+          triggerType: parentId ? "reply" : "comment",
+          triggerId: comment._id,
+          message: `${responseComment.user?.username || "Someone"} ${parentId ? "replied" : "commented"} on your ${parentId ? "comment" : "post"}`,
+          entityId: entityId || (parentId ? parentId : postId),
+          entityType: parentId ? "comment" : "post",
+          postId,
+        }
+      : null;
 
     socket.emit("forward:event", { type: "comment:new", data: responseComment });
-    await pub.publish("notification:event", JSON.stringify({ notificationPayload }));
+    if (notificationPayload) {
+      await pub.publish("notification:event", JSON.stringify({ notificationPayload }));
+    }
 
     res.send(responseComment);
   } catch (error) {

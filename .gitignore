@@ -1,1 +1,3 @@
 node_modules
+shared-config/.env
+.env

@@ -38,7 +38,9 @@ app.get("/", (req, res) => {
 });
 
 // ✅ Start Express server
-const port = process.env.NOTIFICATION_PORT || 3002;
-app.listen(port, () => {
-  console.log(`Server running on http://localhost:${port}`);
+const NOTIFICATION_SERVICE_PORT =
+  process.env.NOTIFICATION_SERVICE_PORT || process.env.NOTIFICATION_PORT || 3002;
+
+app.listen(NOTIFICATION_SERVICE_PORT, () => {
+  console.log(`Server running on http://localhost:${NOTIFICATION_SERVICE_PORT}`);
 });

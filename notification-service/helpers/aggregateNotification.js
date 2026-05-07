@@ -66,8 +66,17 @@ export function buildAggregatedMessage(triggerType, actors, totalCount, notifica
         case "follow":
             return `${actorName} started following you`;
 
+        case "newPost":
+            return notification?.message || `${actorName} published a new post`;
+
+        case "system":
+            return notification?.message || "ByteHive has a new announcement";
+
+        case "admin_action":
+            return notification?.message || "An admin action was performed on your account or content";
+
         default:
-            return `${actorName} did ${triggerType}${totalCount > 1 ? ` (${totalCount} times)` : ""}`;
+            return notification?.message || `${actorName} performed an update${totalCount > 1 ? ` (${totalCount} times)` : ""}`;
     }
 }
 

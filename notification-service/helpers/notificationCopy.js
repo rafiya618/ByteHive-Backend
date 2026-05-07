@@ -3,7 +3,7 @@ export const notificationCopy = {
   likePost: {
     subject: (actor) => `${actor} liked your post`,
     headline: (actor) => `${actor} liked your post`,
-    body: () => "Your post is getting attention 🎉"
+    body: () => "Your post received new engagement."
   },
 
   likeComment: {
@@ -15,13 +15,13 @@ export const notificationCopy = {
   comment: {
     subject: (actor) => `${actor} commented on your post`,
     headline: (actor) => `${actor} commented on your post`,
-    body: () => "Join the conversation by viewing the comment."
+    body: () => "Open the post to view the latest comment."
   },
 
   reply: {
     subject: (actor) => `${actor} replied to your comment`,
     headline: (actor) => `${actor} replied to your comment`,
-    body: () => "Click below to view the reply."
+    body: () => "Open the conversation to review the reply."
   },
 
   mention: {
@@ -34,13 +34,13 @@ export const notificationCopy = {
   follow: {
     subject: (actor) => `${actor} started following you`,
     headline: (actor) => `${actor} started following you`,
-    body: () => "Check out their profile."
+    body: () => "View their profile for more details."
   },
 
   friendRequest: {
-    subject: (actor) => "New friend request",
+    subject: () => "New friend request",
     headline: (actor) => `${actor} sent you a friend request`,
-    body: () => "Respond to the request."
+    body: () => "Review the request and respond when ready."
   },
 
   connectionAccepted: {
@@ -52,50 +52,50 @@ export const notificationCopy = {
   join_request: {
     subject: (actor) => `New join request from ${actor}`,
     headline: (actor) => `${actor} requested to join your community`,
-    body: (actor) => `${actor} wants to join. Review the request to accept or decline.`
+    body: (actor) => `${actor} requested access. Review the request to accept or decline.`
   },
 
   request_approved: {
-    subject: (actor) => "Community join request approved",
-    headline: (actor) => "Your request to join has been approved",
-    body: (actor) => "You are now a member of the community."
+    subject: () => "Community join request approved",
+    headline: () => "Your request to join has been approved",
+    body: () => "You now have access to the community."
   },
 
   // ===== UPDATES =====
   newPost: {
-    subject: () => "New post from your network",
-    headline: () => "Someone shared a new post",
-    body: () => "Check out what’s new."
+    subject: (actor) => `${actor} published a new post`,
+    headline: (actor) => `${actor} published a new post`,
+    body: () => "Open ByteHive to read the latest update."
   },
 
   storyUpdate: {
     subject: () => "New story update",
     headline: () => "A new story was posted",
-    body: () => "View the latest story."
+    body: () => "Open ByteHive to view the latest story."
   },
 
   liveStream: {
     subject: () => "Live stream started",
     headline: () => "A live stream is happening now",
-    body: () => "Join before it ends."
+    body: () => "Join now to watch the live session."
   },
 
   eventInvite: {
     subject: () => "You're invited to an event",
     headline: () => "New event invitation",
-    body: () => "See event details."
+    body: () => "Review the event details and respond when convenient."
   },
 
   // ===== SYSTEM & SECURITY =====
   system: {
-    subject: () => "System notification from ByteHive",
-    headline: () => "System update",
-    body: () => "Please review the system message."
+    subject: () => "Important announcement from ByteHive",
+    headline: () => "Platform announcement",
+    body: () => "Please review this announcement for the latest update."
   },
 
   security: {
     subject: () => "Security alert",
     headline: () => "Important security notice",
-    body: () => "If this wasn’t you, take action immediately."
+    body: () => "Please review this activity and secure your account if needed."
   }
 };
