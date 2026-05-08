@@ -176,8 +176,12 @@ async function getOpenRouterMeaning(word, prompt) {
       _provider: 'openrouter' // Track which provider was used
     };
   } catch (fallbackError) {
-    console.error(`❌ [AI-MEANING] OpenRouter FAILED for "${word}":`, fallbackError.message);
-    const meaningError = new Error(`Failed to generate meaning for "${word}" - both Gemini and OpenRouter failed`);
+    console.error(`❌ [AI-MEANING] OpenRouter FAILED for "${word}":`, {
+      message: fallbackError.message,
+      status: fallbackError.status,
+      response: fallbackError.response?.data
+    });
+    const meaningError = new Error(`AI Service temporarily unavailable (${fallbackError.message}). Please try again.`);
     meaningError.code = 'AI_PROCESSING_ERROR';
     meaningError.status = 500;
     throw meaningError;
