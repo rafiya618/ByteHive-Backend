@@ -61,6 +61,18 @@ export const notificationCopy = {
     body: () => "You now have access to the community."
   },
 
+  request_declined: {
+    subject: () => "Community join request declined",
+    headline: () => "Your request to join was declined",
+    body: () => "You can try joining other communities or contact the admin."
+  },
+
+  community_follow: {
+    subject: (actor) => `${actor} followed your community`,
+    headline: (actor) => `${actor} followed your community`,
+    body: () => "Your community is growing!"
+  },
+
   // ===== UPDATES =====
   newPost: {
     subject: (actor) => `${actor} published a new post`,

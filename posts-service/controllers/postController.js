@@ -121,6 +121,72 @@ export const createPost = async (req, res) => {
       mediaInputs = [] // array of base64 strings or URLs
     } = req.body;
 
+    // --- COMMUNITY PERMISSION CHECK ---
+    if (community) {
+      try {
+        const communityServiceUrl =
+          process.env.COMMUNITY_SERVICE_URL ||
+          `${HOST}:${process.env.COMMUNITY_SERVICE_PORT || process.env.COMMUNITY_PORT || 5001}`;
+        
+        let targetCommunity = null;
+        let communityId = /^[a-fA-F0-9]{24}$/.test(community) ? community : null;
+
+        if (!communityId) {
+          // Resolve name -> ID first
+          const listRes = await axios.get(`${communityServiceUrl}/api/communities/all`);
+          const communities = Array.isArray(listRes.data?.communities) ? listRes.data.communities : [];
+          const matched = communities.find(
+            (c) => String(c?.community_name || "").toLowerCase() === String(community).toLowerCase()
+          );
+          communityId = matched?._id;
+        }
+
+        if (communityId) {
+          // ALWAYS fetch full details using ID and pass user_id to unmask if private
+          const commRes = await axios.get(`${communityServiceUrl}/api/communities/${communityId}`, {
+            params: { user_id: user_id }
+          });
+          targetCommunity = commRes.data?.community;
+        }
+
+        if (targetCommunity) {
+          const moderation = String(targetCommunity.moderation || "only admin").toLowerCase();
+          const ownerId = String(targetCommunity.user_id?._id || targetCommunity.user_id || "");
+          const currentUserId = String(user_id || "");
+          const moderators = Array.isArray(targetCommunity.moderators) ? targetCommunity.moderators.map(String) : [];
+          const members = Array.isArray(targetCommunity.members) ? targetCommunity.members.map(String) : [];
+
+          const isAdmin = ownerId === currentUserId;
+          const isModerator = moderators.includes(currentUserId);
+          const isMember = members.includes(currentUserId);
+
+          let allowed = false;
+          if (moderation === "only admin") {
+            allowed = isAdmin;
+          } else if (moderation === "allow moderators") {
+            allowed = isAdmin || isModerator;
+          } else if (moderation === "allow all") {
+            allowed = isAdmin || isModerator || isMember;
+          } else {
+            // Default fallback
+            allowed = isAdmin;
+          }
+
+          if (!allowed) {
+            return res.status(403).json({
+              ok: false,
+              error: `Permission denied. Only ${moderation} can post in this community.`
+            });
+          }
+        }
+      } catch (permError) {
+        console.error("[POST] Permission check error (non-blocking, allowing):", permError.message);
+        // We let it pass if service is down to avoid blocking user, or we could block.
+        // For strictness, let's allow but log.
+      }
+    }
+    // --- END PERMISSION CHECK ---
+
     const post = await Post.create({
       post_title,
       small_description,

@@ -561,7 +561,7 @@ export const addModerator = async (req, res) => {
 // ==Remove Moderator
 export const removeModerator = async (req, res) => {
   try {
-    const { communityId, moderatorUserId } = req.params;
+    const { communityId, userId: moderatorUserId } = req.params;
     const { user_id } = req.body;
 
     const community = await Community.findById(communityId);
@@ -691,9 +691,9 @@ export const addPostToCommunity = async (req, res) => {
     }
 
     // Authorization check - anyone who can post can add to count
-    const isAdmin = community.user_id === user_id;
-    const isModerator = community.moderators.includes(user_id);
-    const isFollower = community.members.includes(user_id);
+    const isAdmin = String(community.user_id) === String(user_id);
+    const isModerator = community.moderators.map(String).includes(String(user_id));
+    const isFollower = community.members.map(String).includes(String(user_id));
 
     let canPost = false;
 

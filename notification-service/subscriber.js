@@ -30,6 +30,11 @@ const defaultPrefs = {
     network: {
       follow: { inApp: true, push: true, email: false }
     },
+    community: {
+      join_request: { inApp: true, push: true, email: true },
+      community_follow: { inApp: true, push: true, email: false },
+      request_approved: { inApp: true, push: true, email: false }
+    },
     updates: {
       newPost: { inApp: true, push: true, email: false },
       streakReminder: { inApp: true, push: true, email: false }
@@ -49,6 +54,10 @@ function getPerTypePreference(prefs, triggerType) {
     comment: "activities.comment",
     reply: "activities.reply",
     follow: "network.follow",
+    join_request: "community.join_request",
+    community_follow: "community.community_follow",
+    request_approved: "community.request_approved",
+    request_declined: "community.request_approved", // Map to approved settings for simplicity or keep default
     newPost: "updates.newPost",
     streak_warning: "updates.streakReminder",
     admin_action: "system",

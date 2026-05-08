@@ -6,7 +6,7 @@ import communityRoutes from './routes/communityRoutes.js';
 import adminCommunityRoutes from './routes/adminCommunityRoutes.js';
 import './subscriber.js';
 
-dotenv.config();
+dotenv.config({ path: '../shared-config/.env' });
 
 const app = express();
 

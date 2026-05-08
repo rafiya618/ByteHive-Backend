@@ -19,14 +19,23 @@ export async function searchBlogs(req, res) {
 
     if (relatedBlog) {
       console.log('Found cached related blogs');
-      relatedBlog.searchCount += 1;
-      await relatedBlog.save();
+      
+      // Safety check: If cached blogs are missing IDs, invalidate and re-fetch
+      const hasIds = relatedBlog.relatedPosts.every(p => p.postId || p.id);
+      if (!hasIds) {
+        console.log('⚠️ [SEARCH] Stale cache detected (missing IDs). Re-fetching...');
+        await RelatedBlog.deleteOne({ _id: relatedBlog._id });
+        // Continue to fresh fetch below
+      } else {
+        relatedBlog.searchCount += 1;
+        await relatedBlog.save();
 
-      return res.status(200).json({
-        success: true,
-        cached: true,
-        data: relatedBlog.relatedPosts,
-      });
+        return res.status(200).json({
+          success: true,
+          cached: true,
+          data: relatedBlog.relatedPosts,
+        });
+      }
     }
 
     // Fetch posts from posts service

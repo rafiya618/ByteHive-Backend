@@ -19,8 +19,7 @@ const viewTrackingSchema = new mongoose.Schema({
     },
     viewed_at: {
         type: Date,
-        default: Date.now,
-        index: true
+        default: Date.now
     },
     session_date: {
         type: String, // Format: YYYY-MM-DD
