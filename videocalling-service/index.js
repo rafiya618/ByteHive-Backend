@@ -3,7 +3,7 @@ import http from "http";
 import { Server as SocketIO } from "socket.io";
 import registerSocketHandlers from "./socket/socketHandlers.js";
 import { createMediasoupWorker } from "./mediasoup/mediasoupWorker.js";
-import { PORT } from "./config.js";
+import { LISTEN_IP, PORT } from "./config.js";
 
 const app = express();
 const server = http.createServer(app);
@@ -13,12 +13,23 @@ const io = new SocketIO(server, {
 
 let worker;
 
+server.on("error", (error) => {
+  if (error?.code === "EADDRINUSE") {
+    console.error(
+      `Port ${PORT} is already in use. Stop the existing videocalling-service process or set a different PORT.`
+    );
+    return;
+  }
+  console.error("HTTP server error:", error);
+});
+
 async function start() {
   worker = await createMediasoupWorker();
   registerSocketHandlers(io, worker);
 
-  server.listen(PORT, () => {
+  server.listen(PORT, LISTEN_IP, () => {
     console.log(`🚀 Server listening on port ${PORT}`);
+    console.log(`🌐 Listening IP: ${LISTEN_IP}`);
     console.log("📹 Mediasoup SFU ready for video calls");
   });
 }
@@ -29,6 +40,9 @@ process.on("unhandledRejection", (reason, promise) => {
 });
 process.on("uncaughtException", (error) => {
   console.error("Uncaught Exception:", error);
+  if (error?.code === "EADDRINUSE") {
+    return;
+  }
   process.exit(1);
 });
 // Graceful shutdown
