@@ -14,6 +14,7 @@ const relatedBlogSchema = new Schema(
     relatedPosts: [
       {
         postId: String,
+        id: String,
         title: String,
         snippet: String,
         readTime: String,

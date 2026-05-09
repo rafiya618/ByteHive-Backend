@@ -60,6 +60,9 @@ export function buildAggregatedMessage(triggerType, actors, totalCount, notifica
         case "request_approved":
             return `${actorName} approved your request to join ${commName}`;
 
+        case "request_declined":
+            return `${actorName} declined your request to join ${commName}`;
+
         case "community_follow":
             return `${actorName} started following your community ${commName}`;
 

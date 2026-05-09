@@ -9,7 +9,7 @@ const notificationSchema = new mongoose.Schema(
     // --- Trigger/Event ---
     triggerType: {
       type: String,
-      enum: ["comment", "reply", "likeComment", "likePost", "mention", "follow", "friendRequest", "connectionAccepted", "join_request", "request_approved", "community_follow", "newPost", "storyUpdate", "liveStream", "eventInvite", "streak_warning", "admin_action", "system", "security", "aggregate"]
+      enum: ["comment", "reply", "likeComment", "likePost", "mention", "follow", "friendRequest", "connectionAccepted", "join_request", "request_approved", "request_declined", "community_follow", "newPost", "storyUpdate", "liveStream", "eventInvite", "streak_warning", "admin_action", "system", "security", "aggregate"]
     },
     // triggerId: { type: String }, // Optional if aggregated; otherwise used as fallback
 

@@ -23,6 +23,13 @@ const perTypeSchema = new mongoose.Schema({
     follow: { type: channelSchema, default: () => ({}) }
   },
 
+  // 🟠 Community events
+  community: {
+    join_request: { type: channelSchema, default: () => ({ push: true }) },
+    community_follow: { type: channelSchema, default: () => ({ push: true }) },
+    request_approved: { type: channelSchema, default: () => ({ push: true }) }
+  },
+
   // 🔵 Content / Updates
   updates: {
     newPost: { type: channelSchema, default: () => ({}) },

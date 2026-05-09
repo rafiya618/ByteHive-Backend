@@ -5,10 +5,10 @@ import OpenAI from 'openai';
 // Initialize Gemini AI
 const genAI = new GoogleGenerativeAI(config.geminiApiKey);
 // Standard model for text/chat
-const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 // Model optimized for JSON responses
 const jsonModel = genAI.getGenerativeModel({
-  model: 'gemini-2.5-flash',
+  model: 'gemini-1.5-flash',
   generationConfig: {
     responseMimeType: "application/json",
     maxOutputTokens: 16384 // Increased to prevent truncation
@@ -18,9 +18,9 @@ const jsonModel = genAI.getGenerativeModel({
 // Initialize OpenRouter as fallback (using OpenAI SDK with OpenRouter base URL)
 const openrouter = new OpenAI({
   baseURL: "https://openrouter.ai/api/v1",
-  apiKey: process.env.OPENROUTER_API_KEY || ''
+  apiKey: config.openrouterApiKey || process.env.OPENROUTER_API_KEY || ''
 });
-const OPENROUTER_MODEL = "google/gemma-3-4b-it:free";
+const OPENROUTER_MODEL = "google/gemini-2.0-flash-001";
 
 // Log AI configuration on startup
 console.log('🤖 [AI-CONFIG] Smart Reading Service AI Configuration:');
@@ -67,16 +67,27 @@ export async function getMeaningFromAI(word) {
   console.log(' getMeaningFromAI called for word:', word);
   console.log('Config check:', { aiProvider: config.aiProvider, hasGeminiKey: !!config.geminiApiKey });
 
-  // ALWAYS use Gemini AI - Single Source of Truth
+  // Use Gemini AI
   if (config.aiProvider === 'gemini' && config.geminiApiKey) {
     console.log(' Using Gemini AI for meaning...');
     return await getGeminiMeaning(word);
   }
 
-  // If using other AI providers
-  if (config.aiProvider === 'openai' && config.openaiApiKey) {
-    console.log('Using OpenAI for meaning...');
-    return await getOpenAIMeaning(word);
+  // Use OpenRouter AI
+  if (config.aiProvider === 'openrouter' && (config.openrouterApiKey || process.env.OPENROUTER_API_KEY)) {
+    console.log(' Using OpenRouter for meaning...');
+    const prompt = `You are a dictionary API. Provide a detailed definition for the word "${word}" in strict JSON format. 
+    Required JSON Structure:
+    {
+      "word": "${word}",
+      "definition": "A clear, comprehensive definition",
+      "pronunciation": "Phonetic pronunciation (IPA)",
+      "partOfSpeech": "noun/verb/adjective/etc",
+      "examples": ["Example sentence 1", "Example sentence 2"],
+      "synonyms": ["synonym1", "synonym2"],
+      "antonyms": ["antonym1", "antonym2"]
+    }`;
+    return await getOpenRouterMeaning(word, prompt);
   }
 
   // No AI provider configured - throw error
@@ -112,6 +123,11 @@ async function getGeminiMeaning(word) {
     const text = response.text();
 
     console.log(`✅ [AI-MEANING] SUCCESS via Gemini for: "${word}"`);
+    
+    const cleanedText = cleanJsonString(text);
+    const fixedText = fixIncompleteJson(cleanedText);
+    const parsed = JSON.parse(fixedText);
+
     return {
       word: parsed.word || word,
       definition: parsed.definition || `Definition for ${word}`,
@@ -138,7 +154,11 @@ async function getOpenRouterMeaning(word, prompt) {
     
     const completion = await openrouter.chat.completions.create({
       model: OPENROUTER_MODEL,
-      messages: [{ role: "user", content: prompt }]
+      messages: [{ role: "user", content: prompt }],
+      headers: {
+        "HTTP-Referer": "http://localhost:5173",
+        "X-Title": "ByteHive Developer Platform",
+      }
     });
 
     const text = completion.choices[0]?.message?.content || '{}';
@@ -156,8 +176,12 @@ async function getOpenRouterMeaning(word, prompt) {
       _provider: 'openrouter' // Track which provider was used
     };
   } catch (fallbackError) {
-    console.error(`❌ [AI-MEANING] OpenRouter FAILED for "${word}":`, fallbackError.message);
-    const meaningError = new Error(`Failed to generate meaning for "${word}" - both Gemini and OpenRouter failed`);
+    console.error(`❌ [AI-MEANING] OpenRouter FAILED for "${word}":`, {
+      message: fallbackError.message,
+      status: fallbackError.status,
+      response: fallbackError.response?.data
+    });
+    const meaningError = new Error(`AI Service temporarily unavailable (${fallbackError.message}). Please try again.`);
     meaningError.code = 'AI_PROCESSING_ERROR';
     meaningError.status = 500;
     throw meaningError;
@@ -169,8 +193,9 @@ export async function simplifyContentWithAI(content, level = 'detailed') {
     return await simplifyWithGemini(content, level);
   }
 
-  if (config.aiProvider === 'openai' && config.openaiApiKey) {
-    return await simplifyWithOpenAI(content, level);
+  if (config.aiProvider === 'openrouter' && (config.openrouterApiKey || process.env.OPENROUTER_API_KEY)) {
+    const { prompt, expectedFields } = getSimplificationPrompt(content, level);
+    return await simplifyWithOpenRouter(content, level, prompt, expectedFields); 
   }
 
   // Fallback if no AI provider configured
@@ -188,117 +213,29 @@ async function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function simplifyWithGemini(content, level = 'detailed_summary') {
+// Helper to get prompt and expected fields for simplification
+function getSimplificationPrompt(content, level) {
   let prompt = '';
   let expectedFields = [];
 
-  // ========== SEPARATE PROMPTS PER TYPE ==========
-
   if (level === 'summarize') {
-    // TYPE 1: SUMMARIZE - Simplify language, keep same length
-    prompt = `Simplify the following blog post content into easier-to-understand language.
-
-**Task:** Rewrite the ENTIRE content using simpler words and shorter sentences.
-- Replace complex/technical words with common alternatives
-- Break long sentences into shorter ones (max 15 words each)
-- Maintain ALL information and details from original
-- Keep the SAME overall length as original
-- Preserve structure (paragraphs, lists, etc.)
-
-**Text to simplify:**
-${content}
-
-**Required JSON Structure:**
-{
-  "summarize": "The complete simplified version with all content preserved"
-}
-
-**Rules:**
-- NO summarization - keep full length
-- ONLY simplify language difficulty
-- Replace difficult words: utilize→use, implement→add, facilitate→help
-- Split complex sentences
-- Return ONLY the summarize field`;
+    prompt = `Simplify the following blog post content into easier-to-understand language.\n\n**Task:** Rewrite the ENTIRE content using simpler words and shorter sentences.\n- Replace complex/technical words with common alternatives\n- Break long sentences into shorter ones (max 15 words each)\n- Maintain ALL information and details from original\n- Keep the SAME overall length as original\n- Preserve structure (paragraphs, lists, etc.)\n\n**Text to simplify:**\n${content}\n\n**Required JSON Structure:**\n{\n  "summarize": "The complete simplified version with all content preserved"\n}\n\n**Rules:**\n- NO summarization - keep full length\n- ONLY simplify language difficulty\n- Replace difficult words: utilize→use, implement→add, facilitate→help\n- Split complex sentences\n- Return ONLY the summarize field`;
     expectedFields = ['summarize'];
-
   } else if (level === 'key_takeaways') {
-    // TYPE 2: KEY TAKEAWAYS - Extract 3-5 main points as bullets
-    prompt = `Extract the key takeaways from the following blog post.
-
-**Task:** Identify 3-5 MAIN points that capture the essence of the content.
-
-**Text:**
-${content}
-
-**Required JSON Structure:**
-{
-  "keyTakeaways": [
-    "Complete, standalone sentence summarizing main point 1",
-    "Complete, standalone sentence summarizing main point 2",
-    "Complete, standalone sentence summarizing main point 3"
-  ]
-}
-
-**Rules:**
-- Extract EXACTLY 3-5 points (no more, no less)
-- Each point must be a COMPLETE sentence (subject + verb + object)
-- Each must be STANDALONE (understandable without context)
-- Focus on actionable insights or key facts
-- NO fragments like "The importance of..." or "How to..."
-- NO references like "This article..." or "The post..."
-- Return ONLY the keyTakeaways array`;
+    prompt = `Extract the key takeaways from the following blog post.\n\n**Task:** Identify 3-5 MAIN points that capture the essence of the content.\n\n**Text:**\n${content}\n\n**Required JSON Structure:**\n{\n  "keyTakeaways": [\n    "Complete, standalone sentence summarizing main point 1",\n    "Complete, standalone sentence summarizing main point 2",\n    "Complete, standalone sentence summarizing main point 3"\n  ]\n}\n\n**Rules:**\n- Extract EXACTLY 3-5 points (no more, no less)\n- Each point must be a COMPLETE sentence (subject + verb + object)\n- Each must be STANDALONE (understandable without context)\n- Focus on actionable insights or key facts\n- NO fragments like "The importance of..." or "How to..."\n- NO references like "This article..." or "The post..."\n- Return ONLY the keyTakeaways array`;
     expectedFields = ['keyTakeaways'];
-
   } else if (level === 'concise_summary') {
-    // TYPE 3: CONCISE SUMMARY - Brief 2-3 sentence overview
-    prompt = `Create a concise summary of the following blog post.
-
-**Task:** Condense the content into a brief 2-3 sentence overview.
-
-**Text:**
-${content}
-
-**Required JSON Structure:**
-{
-  "conciseSummary": "A brief 2-3 sentence summary capturing the main message"
-}
-
-**Rules:**
-- EXACTLY 2-3 sentences (no more, no less)
-- Focus on the PRIMARY message/conclusion
-- Self-contained (no "this article" or "the post")
-- Clear and direct language
-- Omit minor details and examples
-- Maximum 60 words total
-- Return ONLY the conciseSummary field`;
+    prompt = `Create a concise summary of the following blog post.\n\n**Task:** Condense the content into a brief 2-3 sentence overview.\n\n**Text:**\n${content}\n\n**Required JSON Structure:**\n{\n  "conciseSummary": "A brief 2-3 sentence summary capturing the main message"\n}\n\n**Rules:**\n- EXACTLY 2-3 sentences (no more, no less)\n- Focus on the PRIMARY message/conclusion\n- Self-contained (no "this article" or "the post")\n- Clear and direct language\n- Omit minor details and examples\n- Maximum 60 words total\n- Return ONLY the conciseSummary field`;
     expectedFields = ['conciseSummary'];
-
   } else {
-    // TYPE 4: DETAILED SUMMARY - Comprehensive 5-7 sentence summary
-    prompt = `Create a comprehensive summary of the following blog post.
-
-**Task:** Provide a detailed summary covering all major points and key supporting details.
-
-**Text:**
-${content}
-
-**Required JSON Structure:**
-{
-  "detailedSummary": "A detailed 5-7 sentence summary covering all major points with supporting details"
-}
-
-**Rules:**
-- EXACTLY 5-7 sentences (comprehensive but concise)
-- Cover ALL major points and themes
-- Include key supporting details and examples
-- Maintain logical flow between sentences
-- Self-contained (readable alone without original)
-- Preserve important technical terms
-- Maximum 300 words total (do not strict limit, prioritize completeness)
-- MUST end with a complete sentence (NO ellipsis ...)
-- Return ONLY the detailedSummary field`;
+    prompt = `Create a comprehensive summary of the following blog post.\n\n**Task:** Provide a detailed summary covering all major points and key supporting details.\n\n**Text:**\n${content}\n\n**Required JSON Structure:**\n{\n  "detailedSummary": "A detailed 5-7 sentence summary covering all major points with supporting details"\n}\n\n**Rules:**\n- EXACTLY 5-7 sentences (comprehensive but concise)\n- Cover ALL major points and themes\n- Include key supporting details and examples\n- Maintain logical flow between sentences\n- Self-contained (readable alone without original)\n- Preserve important technical terms\n- Maximum 300 words total\n- MUST end with a complete sentence\n- Return ONLY the detailedSummary field`;
     expectedFields = ['detailedSummary'];
   }
+  return { prompt, expectedFields };
+}
+
+async function simplifyWithGemini(content, level = 'detailed_summary') {
+  const { prompt, expectedFields } = getSimplificationPrompt(content, level);
 
   // ========== SINGLE ATTEMPT + OPENROUTER FALLBACK ==========
   try {
@@ -343,14 +280,20 @@ ${content}
 async function simplifyWithOpenRouter(content, level, prompt, expectedFields) {
   try {
     console.log(`[AI-SIMPLIFY] Using OpenRouter (${OPENROUTER_MODEL}) for: ${level}`);
+    console.log(`[AI-SIMPLIFY] API Key present: ${!!(config.openrouterApiKey || process.env.OPENROUTER_API_KEY)}`);
     
     const completion = await openrouter.chat.completions.create({
       model: OPENROUTER_MODEL,
-      messages: [{ role: "user", content: prompt }]
+      messages: [{ role: "user", content: prompt }],
+      headers: {
+        "HTTP-Referer": "http://localhost:5173", // Required for some OpenRouter models
+        "X-Title": "ByteHive Developer Platform",
+      }
     });
 
     const text = completion.choices[0]?.message?.content || '{}';
     console.log(`[AI-SIMPLIFY] SUCCESS via OpenRouter for: ${level}`);
+    console.log(`[AI-SIMPLIFY] Response length: ${text.length}`);
 
     const cleanedText = cleanJsonString(text);
     const fixedText = fixIncompleteJson(cleanedText);
@@ -366,10 +309,13 @@ async function simplifyWithOpenRouter(content, level, prompt, expectedFields) {
     return resultData;
 
   } catch (fallbackError) {
-    console.error(`[AI-SIMPLIFY] OpenRouter FAILED for ${level}:`, fallbackError.message);
+    console.error(`❌ [AI-SIMPLIFY] OpenRouter FAILED for ${level}:`);
+    console.error(`   ├─ Message: ${fallbackError.message}`);
+    console.error(`   ├─ Status: ${fallbackError.status}`);
+    console.error(`   └─ Data: ${JSON.stringify(fallbackError.response?.data || {})}`);
     
     // Return error response instead of throwing
-    const errorMsg = 'AI service temporarily unavailable. Please try again.';
+    const errorMsg = `AI service temporarily unavailable (${fallbackError.message}). Please try again.`;
     if (level === 'summarize') return { summarize: errorMsg, _provider: 'none' };
     if (level === 'key_takeaways') return { keyTakeaways: [errorMsg], _provider: 'none' };
     if (level === 'concise_summary') return { conciseSummary: errorMsg, _provider: 'none' };
@@ -443,9 +389,17 @@ export async function chatAboutWord(word, userMessage) {
     return await chatWithGemini(word, userMessage);
   }
 
-  console.log('Falling back to mock response');
-  // Mock response
-  return `I understand you're asking about "${word}". ${userMessage} - This is a mock response. Please integrate with a real AI provider.`;
+  if (config.aiProvider === 'openrouter' && (config.openrouterApiKey || process.env.OPENROUTER_API_KEY)) {
+    console.log('Using OpenRouter for chat');
+    const prompt = `You are a helpful AI assistant specializing in explaining concepts related to "${word}". 
+    User's question: "${userMessage}"
+    Required JSON Structure:
+    {
+      "summary": "A brief 2-line summary of the answer",
+      "keyPoints": ["Key detail 1", "Key detail 2", "Key detail 3"]
+    }`;
+    return await chatWithOpenRouter(word, userMessage, prompt);
+  }
 }
 
 async function chatWithGemini(word, userMessage) {
@@ -499,7 +453,11 @@ async function chatWithOpenRouter(word, userMessage, prompt) {
     
     const completion = await openrouter.chat.completions.create({
       model: OPENROUTER_MODEL,
-      messages: [{ role: "user", content: prompt }]
+      messages: [{ role: "user", content: prompt }],
+      headers: {
+        "HTTP-Referer": "http://localhost:5173",
+        "X-Title": "ByteHive Developer Platform",
+      }
     });
 
     const text = completion.choices[0]?.message?.content || '{}';
@@ -540,7 +498,8 @@ export async function findRelatedBlogs(keyword, posts) {
     .slice(0, 5); // Return top 5 related posts
 
   return scoredPosts.map(post => ({
-    id: post._id || post.id,
+    postId: String(post._id || post.id),
+    id: String(post._id || post.id),
     title: post.post_title || post.title || 'Untitled',
     snippet: (post.post_description || post.description || '').substring(0, 150) + '...',
     readTime: `${Math.ceil((post.post_description || post.description || '').split(' ').length / 200)} min read`,
