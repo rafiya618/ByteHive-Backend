@@ -4,6 +4,9 @@ import { Server as SocketIO } from "socket.io";
 import registerSocketHandlers from "./socket/socketHandlers.js";
 import { createMediasoupWorker } from "./mediasoup/mediasoupWorker.js";
 import { PORT } from "./config.js";
+import dotenv from "dotenv";
+
+dotenv.config();
 
 const app = express();
 const server = http.createServer(app);
