@@ -1,6 +1,6 @@
 import Community from '../models/Community.js';
 import { cloudinary, uploadToCloudinary } from '../config/cloudinary.js';
-import { createRedisClients } from "../../shared-config/redisClient.js";
+import { createRedisClients } from "../config/redisClient.js";
 
 const { pub } = await createRedisClients();
 
@@ -819,6 +819,48 @@ export const removePostFromCommunity = async (req, res) => {
   } catch (error) {
     console.error('Remove post from community error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+// ==Remove Post from All Communities (used by posts-service when a post is deleted)
+export const removePostFromAllCommunities = async (req, res) => {
+  try {
+    const { postId } = req.params;
+
+    if (!postId) {
+      return res.status(400).json({ message: 'Post ID is required' });
+    }
+
+    const affectedCommunities = await Community.find({ posts: postId }, { _id: 1, posts: 1 }).lean();
+
+    if (!affectedCommunities.length) {
+      return res.json({
+        message: 'Post not linked to any community',
+        success: true,
+        affectedCommunities: 0,
+      });
+    }
+
+    await Promise.all(
+      affectedCommunities.map(async (community) => {
+        const updatedPosts = (community.posts || []).filter((id) => String(id) !== String(postId));
+        await Community.findByIdAndUpdate(community._id, {
+          $set: {
+            posts: updatedPosts,
+            no_of_posts: updatedPosts.length,
+          },
+        });
+      })
+    );
+
+    return res.json({
+      message: 'Post removed from linked communities successfully',
+      success: true,
+      affectedCommunities: affectedCommunities.length,
+    });
+  } catch (error) {
+    console.error('Remove post from all communities error:', error);
+    return res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
 

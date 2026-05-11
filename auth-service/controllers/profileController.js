@@ -7,7 +7,7 @@ import cloudinary from '../helpers/cloudinary.js';
 import streamifier from 'streamifier';
 import { userModel } from '../models/userModel.js';
 import { generateToken } from '../helpers/authHelper.js';
-import { createRedisClients } from "../../shared-config/redisClient.js";
+import { createRedisClients } from "../config/redisClient.js";
 import { validateName, validateUsername, validateBio, validateSocialLinks } from '../helpers/validators.js';
 
 const { pub } = await createRedisClients();

@@ -1,6 +1,27 @@
 import Post from '../models/Post.js';
-import { createRedisClients } from "../../shared-config/redisClient.js";
+import { createRedisClients } from "../config/redisClient.js";
+import axios from 'axios';
 const { pub } = await createRedisClients();
+const HOST = process.env.HOST || 'http://localhost';
+import { notifyCommunityFollowersForNewPost } from './postController.js';
+
+const unlinkDeletedPostFromCommunities = async (postId) => {
+  try {
+    if (!postId) return;
+    const communityServiceUrl =
+      process.env.COMMUNITY_SERVICE_URL ||
+      `${HOST}:${process.env.COMMUNITY_SERVICE_PORT || process.env.COMMUNITY_PORT || 5001}`;
+
+    await axios.post(
+      `${communityServiceUrl}/api/communities/internal/posts/${postId}/remove`,
+      {},
+      { timeout: 5000 }
+    );
+  } catch (err) {
+    // Keep admin delete non-blocking if cross-service sync fails.
+    console.warn('[ADMIN POST] Failed to unlink deleted post from communities:', err.message);
+  }
+};
 
 const getAdminId = (req) => req.user?.id || req.user?._id || req.user?.userId || 'admin-system';
 
@@ -178,12 +199,20 @@ export const approvePost = async (req, res) => {
     post.status = 'approved';
     await post.save();
 
+    // Notify post owner about approval
     await publishAdminPostNotification({
       receiverId: post.user_id,
       senderId: adminId,
       post,
       message: `Your post "${post.post_title}" has been approved by an admin.`,
     });
+
+    // Notify community followers now that the post is approved
+    try {
+      await notifyCommunityFollowersForNewPost(post);
+    } catch (err) {
+      console.warn('[ADMIN POST] Failed to notify community followers after approval:', err.message || err);
+    }
 
     return res.json({
       ok: true,
@@ -247,6 +276,8 @@ export const deletePostAdmin = async (req, res) => {
     if (!post) {
       return res.status(404).json({ ok: false, message: 'Post not found' });
     }
+
+    await unlinkDeletedPostFromCommunities(post._id?.toString());
 
     await publishAdminPostNotification({
       receiverId: post.user_id,

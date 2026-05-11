@@ -23,7 +23,6 @@ export const queues = {
 // const __dirname = path.dirname(__filename);
 
 // dotenv.config();
-// dotenv.config({ path: path.join(__dirname, "../../shared-config/.env") });
 
 // export const redisConnection = new IORedis({
 //   host: process.env.REDIS_HOST,

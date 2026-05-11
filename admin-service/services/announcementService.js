@@ -1,4 +1,4 @@
-import { createRedisClients } from "../../shared-config/redisClient.js";
+import { createRedisClients } from "../config/redisClient.js";
 import Announcement from "../models/Announcement.js";
 import UserDirectory from "../models/UserDirectory.js";
 

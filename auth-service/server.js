@@ -1,10 +1,9 @@
-import "./config/env.js"; // Load .env BEFORE anything else
 import express from "express";
 import cors from "cors";
 import http from "http";
-// import dotenv from "dotenv";
-// import dotenv from "dotenv";
-// dotenv.config({ path: '../shared-config/.env' });
+import dotenv from "dotenv";
+import path from "path";
+import { fileURLToPath } from "url";
 import passport from "./config/passport.js";
 import authRoute from "./routes/authRoutes.js";
 import profileRoute from "./routes/profileRoutes.js";
@@ -13,7 +12,10 @@ import moderationRoute from "./routes/moderationRoutes.js";
 import connectDB from "./config/db.js";
 // import "./controllers/haha.js"
 
-// dotenv.config();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+dotenv.config({ path: path.join(__dirname, ".env") });
 
 const app = express();
 

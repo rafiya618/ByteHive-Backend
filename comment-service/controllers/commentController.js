@@ -1,6 +1,6 @@
 import commentModel from "../models/commentModel.js";
 import { io } from "socket.io-client";
-import { createRedisClients } from "../../shared-config/redisClient.js";
+import { createRedisClients } from "../config/redisClient.js";
 import commentCacheModel from "../models/commentCacheModel.js";
 // import localCacheModel from "../../notification-service/models/notificationModel.js";
 

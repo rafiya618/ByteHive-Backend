@@ -1,7 +1,7 @@
 import Community from '../models/Community.js';
 import { cloudinary } from '../config/cloudinary.js';
 import axios from 'axios';
-import { createRedisClients } from "../../shared-config/redisClient.js";
+import { createRedisClients } from "../config/redisClient.js";
 const { pub } = await createRedisClients();
 
 const HOST = process.env.HOST || 'http://localhost';
@@ -120,7 +120,7 @@ export const getCommunityPostsAdmin = async (req, res) => {
       try {
         // Fetch each post's details from posts-service
         const postPromises = postIds.map(postId => 
-          axios.get(`${POSTS_SERVICE_URL}/api/posts/${postId}`)
+          axios.get(`${POSTS_SERVICE_URL}/api/posts/${postId}?include_unapproved=true`)
             .then(response => response.data?.post || response.data)
             .catch(err => {
               console.log(`Failed to fetch post ${postId}:`, err.message);

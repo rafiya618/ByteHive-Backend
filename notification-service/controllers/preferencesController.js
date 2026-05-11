@@ -1,5 +1,5 @@
 import Preferences from "../models/preferencesModel.js";
-import { createRedisClients } from "../../shared-config/redisClient.js";
+import { createRedisClients } from "../config/redisClient.js";
 
 // Lazy init for publisher
 let redisPub;

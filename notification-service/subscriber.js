@@ -1,6 +1,6 @@
 // subscriber.js
 import { io } from "socket.io-client";
-import { createRedisClients } from "../shared-config/redisClient.js";
+import { createRedisClients } from "./config/redisClient.js";
 import notificationModel from "./models/notificationModel.js";
 import Preference from "./models/preferencesModel.js";
 import sendEmail from "./helpers/sendEmail.js";

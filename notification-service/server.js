@@ -1,18 +1,21 @@
-import "./config/env.js"; // Load .env BEFORE anything else
 import express from "express";
 import cors from "cors";
 import http from "http";
-import "./subscriber.js"; 
-// import dotenv from "dotenv";
+import dotenv from "dotenv";
+import path from "path";
+import { fileURLToPath } from "url";
 import notificationRoutes from "./routes/notificationRoutes.js";
 import preferenceRoutes from "./routes/preferenceRoutes.js";
 import pushRoutes from "./routes/pushRoutes.js";
 import connectDB from "./config/db.js";
 // import { setupSocket } from "./socket.js";
-// import dotenv from "dotenv";
-// dotenv.config({ path: '../shared-config/.env' });
 
-// dotenv.config();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+dotenv.config({ path: path.join(__dirname, ".env") });
+
+import "./subscriber.js";
 
 const app = express();
 // const server = http.createServer(app);

@@ -1,5 +1,5 @@
 import { Server } from "socket.io";
-import { createRedisClients } from "../shared-config/redisClient.js";
+import { createRedisClients } from "./redisClient.js";
 
 export const setupSocket = async (server) => {
   const io = new Server(server, { cors: { origin: "*" } });

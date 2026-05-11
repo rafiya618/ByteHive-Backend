@@ -1,6 +1,14 @@
 // helpers/push.js
+import dotenv from "dotenv";
+import path from "path";
+import { fileURLToPath } from "url";
 import webPush from "web-push";
 import subscriptionModel from "../models/subscriptionModel.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+dotenv.config({ path: path.join(__dirname, "../.env") });
 
 // Configure VAPID keys
 webPush.setVapidDetails(

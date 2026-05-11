@@ -1,6 +1,6 @@
 import cron from "node-cron";
 import Streak from "./models/streakModel.js";
-import { createRedisClients } from "../shared-config/redisClient.js";
+import { createRedisClients } from "./config/redisClient.js";
 import { hasActivityToday } from "./helpers/retentionHelper.js";
 
 let pub;

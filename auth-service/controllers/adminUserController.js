@@ -1,5 +1,5 @@
 import { userModel } from '../models/userModel.js';
-import { createRedisClients } from "../../shared-config/redisClient.js";
+import { createRedisClients } from "../config/redisClient.js";
 const { pub } = await createRedisClients();
 
 const getAdminId = (req) => req.user?.id || req.user?._id || req.user?.userId || 'admin-system';

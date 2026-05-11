@@ -1,4 +1,4 @@
-import { createRedisClients } from "../shared-config/redisClient.js";
+import { createRedisClients } from "./config/redisClient.js";
 import DashboardStats from "./models/DashboardStats.js";
 
 const { sub } = await createRedisClients();

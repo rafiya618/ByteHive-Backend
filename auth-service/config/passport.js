@@ -1,7 +1,15 @@
+import dotenv from "dotenv";
+import path from "path";
+import { fileURLToPath } from "url";
 import passport from "passport";
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import { userModel } from "../models/userModel.js";
 // import profileModel from "../models/profileModel.js"; // optional
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+dotenv.config({ path: path.join(__dirname, "../.env") });
 
 passport.use(
   new GoogleStrategy(

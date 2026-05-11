@@ -1,7 +1,7 @@
 import Report from "../models/Report.js";
 import DashboardStats from "../models/DashboardStats.js";
 import axios from "axios";
-import { createRedisClients } from "../../shared-config/redisClient.js";
+import { createRedisClients } from "../config/redisClient.js";
 
 const { pub } = await createRedisClients();
 
@@ -51,7 +51,7 @@ export const submitReport = async (req, res) => {
 
     if (targetType === "post") {
       try {
-        const postRes = await axios.get(`${POSTS_SERVICE_URL}/api/posts/${targetId}`);
+        const postRes = await axios.get(`${POSTS_SERVICE_URL}/api/posts/${targetId}?include_unapproved=true`);
         const post = postRes.data?.post || postRes.data;
         targetTitle = post.post_title;
         targetAuthorId = post.user_id;
@@ -179,7 +179,7 @@ export const getReportDetails = async (req, res) => {
 
     if (report.targetType === "post") {
       try {
-        const postRes = await axios.get(`${POSTS_SERVICE_URL}/api/posts/${report.targetId}`);
+        const postRes = await axios.get(`${POSTS_SERVICE_URL}/api/posts/${report.targetId}?include_unapproved=true`);
         targetData = postRes.data?.post || postRes.data;
 
         // Get author info from auth service

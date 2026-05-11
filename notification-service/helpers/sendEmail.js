@@ -1,5 +1,13 @@
+import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import nodemailer from 'nodemailer';
 import oauth2Client from './googleConfig.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+dotenv.config({ path: path.join(__dirname, '../.env') });
 
 const sendEmail = async (email, subject, html) => {
     console.log('entered in sendEmail' )

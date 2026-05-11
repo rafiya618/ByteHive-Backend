@@ -14,7 +14,8 @@ import {
   getAllCommunities,
   getCommunityLite,
   getJoinRequests,
-  respondToJoinRequest
+  respondToJoinRequest,
+  removePostFromAllCommunities
 } from '../controllers/communityController.js';
 import { upload } from '../config/cloudinary.js';
 import { addPostToCommunity, removePostFromCommunity } from '../controllers/communityController.js';
@@ -25,6 +26,7 @@ const router = express.Router();
 router.get('/discover', discoverCommunities);
 router.get('/all', getAllCommunities);
 router.get('/user/:userId', getUserCommunities);
+router.post('/internal/posts/:postId/remove', removePostFromAllCommunities);
 router.get('/:communityId/lite', getCommunityLite);
 router.get('/:communityId', getCommunityDetails);
 

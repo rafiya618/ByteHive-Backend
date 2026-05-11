@@ -1,12 +1,30 @@
 import Post from "../models/Post.js";
 import { queues } from "../config/redis.js";
-import { createRedisClients } from "../../shared-config/redisClient.js";
+import { createRedisClients } from "../config/redisClient.js";
 import axios from "axios";
 
 const { pub } = await createRedisClients();
 const HOST = process.env.HOST || "http://localhost";
 
-async function notifyCommunityFollowersForNewPost(post) {
+async function unlinkDeletedPostFromCommunities(postId) {
+  try {
+    if (!postId) return;
+    const communityServiceUrl =
+      process.env.COMMUNITY_SERVICE_URL ||
+      `${HOST}:${process.env.COMMUNITY_SERVICE_PORT || process.env.COMMUNITY_PORT || 5001}`;
+
+    await axios.post(
+      `${communityServiceUrl}/api/communities/internal/posts/${postId}/remove`,
+      {},
+      { timeout: 5000 }
+    );
+  } catch (err) {
+    // Keep delete non-blocking if cross-service sync fails.
+    console.warn("[POST] Failed to unlink deleted post from communities:", err.message);
+  }
+}
+
+export async function notifyCommunityFollowersForNewPost(post) {
   try {
     if (!post?.community) return;
 
@@ -236,8 +254,7 @@ export const createPost = async (req, res) => {
       console.warn('[POST] Failed to log post activity (non-blocking):', activityError.message);
     }
 
-    // Notify community followers about the new post (non-blocking)
-    await notifyCommunityFollowersForNewPost(post);
+    // Do NOT notify community followers on creation — only notify after approval.
 
     await pub.publish(
       "dashboard:stats",
@@ -262,13 +279,50 @@ export const getPosts = async (req, res) => {
     const skip = parseInt(req.query.skip || "0", 10);
     const limit = Math.min(parseInt(req.query.limit || "10", 10), 100);
 
-    const query = {};
+    const query = {
+      status: "approved",
+      moderation_status: "active",
+      is_visible: true,
+    };
     if (req.query.category) query.category = req.query.category;
     if (req.query.user_id) query.user_id = String(req.query.user_id).trim();
     if (req.query.community) query.community = req.query.community;
-    if (req.query.status) query.status = req.query.status;
 
     // tags can be "ai,web"
+    if (req.query.tags) {
+      const tagList = req.query.tags.split(",").map(s => s.trim()).filter(Boolean);
+      if (tagList.length) query.tags = { $in: tagList };
+    }
+
+    const posts = await Post.find(query)
+      .sort({ date: -1 })
+      .skip(skip)
+      .limit(limit);
+
+    const total = await Post.countDocuments(query);
+
+    res.json({ ok: true, total, count: posts.length, posts });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+};
+
+// GET OWN POSTS — authenticated view for profile page
+export const getMyPosts = async (req, res) => {
+  try {
+    const skip = parseInt(req.query.skip || "0", 10);
+    const limit = Math.min(parseInt(req.query.limit || "20", 10), 100);
+    const userId = String(req.user?.id || req.user?._id || req.user?.userId || req.user?.user_id || "").trim();
+
+    if (!userId) {
+      return res.status(401).json({ ok: false, error: "Unauthorized" });
+    }
+
+    const query = { user_id: userId };
+
+    if (req.query.category) query.category = req.query.category;
+    if (req.query.community) query.community = req.query.community;
+
     if (req.query.tags) {
       const tagList = req.query.tags.split(",").map(s => s.trim()).filter(Boolean);
       if (tagList.length) query.tags = { $in: tagList };
@@ -290,7 +344,16 @@ export const getPosts = async (req, res) => {
 // GET BY ID
 export const getPostById = async (req, res) => {
   try {
-    const post = await Post.findById(req.params.id);
+    const includeUnapproved = String(req.query.include_unapproved || "false").toLowerCase() === "true";
+    const query = { _id: req.params.id };
+
+    if (!includeUnapproved) {
+      query.status = "approved";
+      query.moderation_status = "active";
+      query.is_visible = true;
+    }
+
+    const post = await Post.findOne(query);
     if (!post) return res.status(404).json({ ok: false, error: "Not found" });
 
     res.json({ ok: true, post });
@@ -346,6 +409,7 @@ export const deletePost = async (req, res) => {
   try {
     const deleted = await Post.findByIdAndDelete(req.params.id);
     if (!deleted) return res.status(404).json({ ok: false, error: "Not found" });
+    await unlinkDeletedPostFromCommunities(deleted._id?.toString());
     // Optionally: enqueue a job to delete Cloudinary assets (not implemented here)
     await pub.publish(
       "dashboard:stats",
@@ -753,7 +817,12 @@ export const incrementView = async (req, res) => {
 export const getPostLite = async (req, res) => {
   try {
     const { id } = req.params;
-    const doc = await Post.findById(id).select("tags community createdAt date");
+    const doc = await Post.findOne({
+      _id: id,
+      status: "approved",
+      moderation_status: "active",
+      is_visible: true,
+    }).select("tags community createdAt date");
     if (!doc) return res.status(404).json({ ok: false, error: "Post not found" });
     return res.json({
       ok: true,
@@ -784,7 +853,15 @@ export const getPostCandidates = async (req, res) => {
     }
     if (community) or.push({ community });
 
-    const query = or.length ? { $or: or } : {};
+    const query = {
+      status: "approved",
+      moderation_status: "active",
+      is_visible: true,
+    };
+
+    if (or.length) {
+      query.$or = or;
+    }
 
     const posts = await Post.find(query)
       .select("post_title tags community createdAt date")

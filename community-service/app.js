@@ -1,12 +1,17 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import connectDB from './config/database.js';
 import communityRoutes from './routes/communityRoutes.js';
 import adminCommunityRoutes from './routes/adminCommunityRoutes.js';
 import './subscriber.js';
 
-dotenv.config({ path: '../shared-config/.env' });
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+dotenv.config({ path: path.join(__dirname, '.env') });
 
 const app = express();
 
