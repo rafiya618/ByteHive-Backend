@@ -34,5 +34,5 @@ app.use("/api/posts", moderationRoutes); // Moderation routes (report, moderate,
 app.use("/api/events", eventRoutes);
 app.use("/api/admin/posts", adminPostRoutes); // Admin routes for post management
 
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.POSTS_SERVICE_PORT || process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`🚀 Post service listening on :${PORT}`));

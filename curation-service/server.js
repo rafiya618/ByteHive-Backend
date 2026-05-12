@@ -24,7 +24,7 @@ import { handleError } from './utils/errorHandler.js';
 // Error handling middleware
 app.use(handleError);
 
-const PORT = process.env.PORT || 5004;
+const PORT = process.env.CURATION_SERVICE_PORT || process.env.PORT || 5004;
 const alternativePorts = [5007, 5008, 5009, 5010, 5011];
 
 const tryPort = (port) => {
