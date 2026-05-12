@@ -55,15 +55,15 @@ Do NOT include any explanation outside JSON.
       {
         headers: {
           "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
-          "HTTP-Referer": "http://localhost:3000", // optional but recommended
+          "HTTP-Referer": "http://localhost:3000",
           "X-Title": "Post QA Microservice"
         }
       }
     );
 
     const rawText = response.data.choices[0].message.content;
-    console.log('response by gemini', rawText )
-    // Clean up JSON in case model wraps in backticks or markdown
+    console.log('response by ai moderation service', rawText);
+
     const cleaned = rawText
       .replace(/```json/g, "")
       .replace(/```/g, "")

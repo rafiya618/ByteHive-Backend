@@ -115,11 +115,12 @@ export const Login = async (req, res) => {
 
     // Instead of issuing token immediately, require OTP verification for login
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const hashedOtp = await hashPassword(otp);
     const expiresAt = new Date(Date.now() + 60 * 1000);
 
     await OTP.findOneAndUpdate(
       { email },
-      { otp, expiresAt },
+      { otp: hashedOtp, expiresAt },
       { upsert: true, new: true }
     );
 
@@ -151,7 +152,8 @@ export const verifyLoginOtp = async (req, res) => {
 
     const validOTP = await OTP.findOne({ email });
     if (!validOTP) return sendError(res, 400, 'otp', 'OTP not found');
-    if (validOTP.otp !== otp) return sendError(res, 400, 'otp', 'Invalid OTP');
+    const isOtpMatch = await comparePassword(otp, validOTP.otp);
+    if (!isOtpMatch) return sendError(res, 400, 'otp', 'Invalid OTP');
     if (validOTP.expiresAt < new Date()) return sendError(res, 400, 'otp', 'OTP expired');
 
     const user = await userModel.findOne({ email });
@@ -218,9 +220,10 @@ export const forgotPassword = async (req, res) => {
     }
 
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const hashedOtp = await hashPassword(otp);
     const expiresAt = new Date(Date.now() + 60 * 1000); // 60s expiry
 
-    await OTP.findOneAndUpdate({ email }, { otp, expiresAt }, { upsert: true });
+    await OTP.findOneAndUpdate({ email }, { otp: hashedOtp, expiresAt }, { upsert: true });
 
     await pub.publish(
       "notification:event",
@@ -258,7 +261,8 @@ export const verifyResetOtp = async (req, res) => {
     if (!validOTP) {
       return sendError(res, 400, "otp", "OTP not found!");
     }
-    if (validOTP.otp !== otp) {
+    const isOtpMatch = await comparePassword(otp, validOTP.otp);
+    if (!isOtpMatch) {
       return sendError(res, 400, "otp", "Invalid OTP");
     }
     if (validOTP.expiresAt < new Date()) {
@@ -312,15 +316,18 @@ export const Register = async (req, res) => {
 
     const existingEmail = await userModel.findOne({ email });
     if (existingEmail) {
-      return sendError(res, 409, "email", "User already exists.");
+      if (existingEmail.password) {
+        return sendError(res, 409, "email", "User already exists.");
+      }
     }
 
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const hashedOtp = await hashPassword(otp);
     const expiresAt = new Date(Date.now() + 60 * 1000);
 
     await OTP.findOneAndUpdate(
       { email },
-      { otp, expiresAt },
+      { otp: hashedOtp, expiresAt },
       { upsert: true, new: true }
     );
 
@@ -353,11 +360,12 @@ export const resendOTP = async (req, res) => {
     if (emailError) return sendError(res, 400, "email", emailError);
 
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const hashedOtp = await hashPassword(otp);
     const expiresAt = new Date(Date.now() + 60 * 1000);
 
     await OTP.findOneAndUpdate(
       { email },
-      { otp, expiresAt },
+      { otp: hashedOtp, expiresAt },
       { upsert: true, new: true }
     );
 
@@ -401,7 +409,8 @@ export const verifyOTPAndRegister = async (req, res) => {
     if (!validOTP) {
       return sendError(res, 400, "otp", "OTP not found");
     }
-    if (validOTP.otp !== otp) {
+    const isOtpMatch = await comparePassword(otp, validOTP.otp);
+    if (!isOtpMatch) {
       return sendError(res, 400, "otp", "Invalid OTP");
     }
     if (validOTP.expiresAt < new Date()) {
@@ -410,13 +419,29 @@ export const verifyOTPAndRegister = async (req, res) => {
 
     const hashedPassword = await hashPassword(password);
     const username = email.split("@")[0];
-    
-    const user = await userModel.create({
-      email,
-      password: hashedPassword,
-      username,
-      onboardingStep: 2,
-    });
+
+    let user = await userModel.findOne({ email });
+    if (user) {
+      if (user.password) {
+        return sendError(res, 409, "email", "User already exists.");
+      }
+
+      user.password = hashedPassword;
+      if (!user.username) {
+        user.username = username;
+      }
+      if (!user.onboardingStep) {
+        user.onboardingStep = 2;
+      }
+      await user.save();
+    } else {
+      user = await userModel.create({
+        email,
+        password: hashedPassword,
+        username,
+        onboardingStep: 2,
+      });
+    }
 
     await OTP.deleteOne({ email });
     const token = generateToken(user);

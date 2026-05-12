@@ -1,8 +1,9 @@
 import { Worker, QueueEvents } from "bullmq";
 import { redisConnection } from "../config/redis.js";
 import Post from "../models/Post.js";
-import { analyzePostContent } from "../services/geminiService.js";
+import { analyzePostContent } from "../services/aiModerationService.js";
 import { ruleValidate } from "../services/ruleService.js";
+import { notifyCommunityFollowersForNewPost } from "../controllers/postController.js";
 
 const queueName = "qaJobs";
 const concurrency = 3;
@@ -50,6 +51,14 @@ const processor = async (job) => {
   post.status = final_status;
 
   await post.save();
+
+  if (final_status === "approved") {
+    try {
+      await notifyCommunityFollowersForNewPost(post);
+    } catch (notifyErr) {
+      console.warn("QA notification failed for approved post:", notifyErr.message || notifyErr);
+    }
+  }
 
   const passed = final_status === "approved";
   return { postId, passed };

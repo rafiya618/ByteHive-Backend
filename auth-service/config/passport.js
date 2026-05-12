@@ -29,32 +29,47 @@ passport.use(
 
         let user = await userModel.findOne({ email });
 
-        if (mode === "login") {
-          if (!user) return done(null, false, { message: "User not found. Please register first." });
-          if (user.googleId !== profile.id) return done(null, false, { message: "Google account mismatch. Please use the correct Google account." });
-          return done(null, user);
-        }
+        if (user) {
+          let wasLinked = false;
 
-        if (mode === "register") {
-          if (user) {
-            // Already registered → log in automatically
-            return done(null, user, { message: "You are already registered. Logging you in..." });
+          if (user.googleId && user.googleId !== profile.id) {
+            return done(null, false, { message: "Google account mismatch. Please use the correct Google account." });
           }
 
-          // Create new user
-          user = await userModel.create({
-            email,
-            googleId: profile.id,
-            onboardingStep: 2
-          });
+          if (!user.googleId) {
+            wasLinked = true;
+            user.googleId = profile.id;
+            if (!user.onboardingStep) {
+              user.onboardingStep = 2;
+            }
+            await user.save();
+          }
 
-          // Optional profile creation
-          // await profileModel.create({ user: user._id, name: user.username, bio: '', socials: {} });
+          let message = "";
+          if (wasLinked) {
+            message = "Google account linked successfully.";
+          } else if (mode === "register") {
+            message = "You are already registered. Logging you in...";
+          }
 
-          return done(null, user);
+          return done(null, user, { message });
         }
 
-        return done(new Error("Invalid mode"), null);
+        if (mode === "login") {
+          return done(null, false, { message: "User not found. Please register first." });
+        }
+
+        // Create new user when no existing account is found
+        user = await userModel.create({
+          email,
+          googleId: profile.id,
+          onboardingStep: 2
+        });
+
+        // Optional profile creation
+        // await profileModel.create({ user: user._id, name: user.username, bio: '', socials: {} });
+
+        return done(null, user);
       } catch (error) {
         console.error("❌ Error in Google authentication:", error);
         return done(error, null);
