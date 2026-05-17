@@ -35,9 +35,7 @@ app.use("/api/threads", threadRoutes);
 app.use("/api/messages", messageRoutes);
 
 const mongoUri =
-  process.env.MONGODB_URI ||
-  process.env.MONGO_URL ||
-  "mongodb://rafiamalik787:DXeBg0sPDCEStAhQ@bytehive-shard-00-00.xqmy3.mongodb.net:27017,bytehive-shard-00-01.xqmy3.mongodb.net:27017,bytehive-shard-00-02.xqmy3.mongodb.net:27017/?ssl=true&replicaSet=atlas-ntyda5-shard-0&authSource=admin&retryWrites=true&w=majority&appName=ByteHive";
+  process.env.MONGODB_URI
 
 mongoose.connect(mongoUri)
   .then(() => console.log("MongoDB connected"))
@@ -47,4 +45,4 @@ mongoose.connect(mongoUri)
 chatSocket(io);
 
 const PORT = process.env.CHATTING_SERVICE_PORT || 5050;
-server.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
+server.listen(PORT, () => console.log(`Server running on Port: ${PORT}`));
