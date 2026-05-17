@@ -2,7 +2,7 @@ import { LISTEN_IP, ANNOUNCED_IP } from "../config.js";
 
 export default function registerSocketHandlers(io, worker) {
   // Store chat messages in-memory, per room
-  const inCallChats = new Map(); // roomId -> array of { socketId, message, ts }
+  const inCallChats = new Map(); // roomId -> array of { socketId, senderName, message, ts }
   // Store mediasoup routers, transports, producers, consumers per room
   const rooms = new Map(); // roomId -> { router, transports, producers, consumers, members }
 
@@ -10,17 +10,23 @@ export default function registerSocketHandlers(io, worker) {
     console.log("Socket connected:", socket.id);
 
     // --- In-Call Chat: send + history ---
-    socket.on("call:chat-message", ({ roomId, message }) => {
+    socket.on("call:chat-message", ({ roomId, message, senderName }) => {
       if (!inCallChats.has(roomId)) inCallChats.set(roomId, []);
       const chatLog = inCallChats.get(roomId);
-      const msg = { socketId: socket.id, message, ts: Date.now() };
+      const msg = {
+        socketId: socket.id,
+        senderName: senderName || socket.data?.displayName || socket.id,
+        message,
+        ts: Date.now()
+      };
       chatLog.push(msg);
       io.to(roomId).emit("call:chat-message", msg);
     });
 
     // 1. Join Room
-    socket.on("join-room", async ({ roomId }, callback) => {
+    socket.on("join-room", async ({ roomId, displayName }, callback) => {
       try {
+        socket.data.displayName = displayName || socket.data.displayName || socket.id;
         // Create room if not exists
         if (!rooms.has(roomId)) {
           const router = await worker.createRouter({ mediaCodecs: [
@@ -37,13 +43,21 @@ export default function registerSocketHandlers(io, worker) {
         }
         const room = rooms.get(roomId);
         if (!room.members.has(socket.id)) {
-          room.members.set(socket.id, { transports: [], producers: [] });
+          room.members.set(socket.id, { transports: [], producers: [], displayName: socket.data.displayName });
+        } else {
+          const member = room.members.get(socket.id);
+          member.displayName = socket.data.displayName;
         }
         socket.join(roomId);
-        socket.to(roomId).emit("peer-joined", { socketId: socket.id });
+        socket.to(roomId).emit("peer-joined", { socketId: socket.id, displayName: socket.data.displayName });
         const existingProducers = [...room.producers.values()]
           .filter(p => p.ownerSocketId !== socket.id)
-          .map(p => ({ id: p.producer.id, kind: p.kind, ownerSocketId: p.ownerSocketId }));
+          .map(p => ({
+            id: p.producer.id,
+            kind: p.kind,
+            ownerSocketId: p.ownerSocketId,
+            ownerDisplayName: p.ownerDisplayName || room.members.get(p.ownerSocketId)?.displayName || p.ownerSocketId
+          }));
         const chatHistory = inCallChats.get(roomId) || [];
         callback({
           routerRtpCapabilities: room.router.rtpCapabilities,
@@ -103,10 +117,20 @@ export default function registerSocketHandlers(io, worker) {
         const tEntry = room.transports.get(transportId);
         if (!tEntry) throw new Error("transport not found");
         const producer = await tEntry.transport.produce({ kind, rtpParameters });
-        room.producers.set(producer.id, { producer, ownerSocketId: socket.id, kind });
+        room.producers.set(producer.id, {
+          producer,
+          ownerSocketId: socket.id,
+          ownerDisplayName: room.members.get(socket.id)?.displayName || socket.data?.displayName || socket.id,
+          kind
+        });
         const member = room.members.get(socket.id);
         if (member) member.producers.push(producer.id);
-        socket.to(roomId).emit("new-producer", { producerId: producer.id, kind, ownerSocketId: socket.id });
+        socket.to(roomId).emit("new-producer", {
+          producerId: producer.id,
+          kind,
+          ownerSocketId: socket.id,
+          ownerDisplayName: room.members.get(socket.id)?.displayName || socket.data?.displayName || socket.id
+        });
         const closeProducer = () => {
           room.producers.delete(producer.id);
           io.to(roomId).emit("producer-closed", { producerId: producer.id });
@@ -147,6 +171,7 @@ export default function registerSocketHandlers(io, worker) {
           kind: consumer.kind,
           rtpParameters: consumer.rtpParameters,
           ownerSocketId: producerInfo.ownerSocketId,
+          ownerDisplayName: producerInfo.ownerDisplayName || room.members.get(producerInfo.ownerSocketId)?.displayName || producerInfo.ownerSocketId,
         });
       } catch (err) {
         callback({ error: err.message });
