@@ -1,19 +1,24 @@
 import { createClient } from "redis";
+import dotenv from "dotenv";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+dotenv.config({ path: path.join(__dirname, "..", ".env") });
 
 let clientsPromise;
 
 function buildRedisUrl() {
-  if (process.env.REDIS_URL) return process.env.REDIS_URL;
+  const redisUrl = process.env.REDIS_URL;
 
-  const host = process.env.REDIS_HOST || "127.0.0.1";
-  const port = process.env.REDIS_PORT || "6379";
-  const password = process.env.REDIS_PASSWORD;
-
-  if (password) {
-    return `redis://:${encodeURIComponent(password)}@${host}:${port}`;
+  if (!redisUrl) {
+    console.warn("[Redis] REDIS_URL is missing; using fallback clients.");
+    return null;
   }
 
-  return `redis://${host}:${port}`;
+  return redisUrl;
 }
 
 function createNoopClients() {
@@ -42,6 +47,11 @@ export async function createRedisClients() {
 
   clientsPromise = (async () => {
     const url = buildRedisUrl();
+
+    if (!url) {
+      return createNoopClients();
+    }
+
     const pub = createClient({
       url,
       socket: {
@@ -49,6 +59,7 @@ export async function createRedisClients() {
         reconnectStrategy: (retries) => Math.min(retries * 200, 2000),
       },
     });
+
     const sub = pub.duplicate();
 
     pub.on("error", (err) => {
@@ -61,11 +72,11 @@ export async function createRedisClients() {
 
     try {
       await Promise.all([pub.connect(), sub.connect()]);
-      console.log(`[Redis] Connected to ${url}`);
+      console.log(`[Redis] Connected`);
       return { pub, sub, isFallback: false };
     } catch (err) {
-      console.error(`[Redis] Connection failed at ${url}:`, err.message);
-      console.warn("[Redis] Using no-op fallback clients so services can still boot.");
+      console.error(`[Redis] Connection failed:`, err.message);
+      console.warn("[Redis] Using fallback clients.");
       return createNoopClients();
     }
   })();

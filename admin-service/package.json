@@ -13,6 +13,7 @@
   "type": "module",
   "description": "",
   "dependencies": {
+    "redis": "^5.10.0",
     "axios": "^1.13.2",
     "bcrypt": "^5.1.1",
     "bytehive": "file:..",
