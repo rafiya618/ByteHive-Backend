@@ -1,4 +1,4 @@
-import { createRedisClients } from "./config/redisClient.js";
+import { createRedisClients } from "./config/redis.js";
 import Post from "./models/Post.js";
 
 const { sub } = await createRedisClients();

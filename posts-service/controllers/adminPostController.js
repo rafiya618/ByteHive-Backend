@@ -1,5 +1,5 @@
 import Post from '../models/Post.js';
-import { createRedisClients } from "../config/redisClient.js";
+import { createRedisClients } from "../config/redis.js";
 import axios from 'axios';
 const { pub } = await createRedisClients();
 const HOST = process.env.HOST || 'http://localhost';

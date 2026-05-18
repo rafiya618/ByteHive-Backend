@@ -1,6 +1,6 @@
 import Post from "../models/Post.js";
 import { queues } from "../config/redis.js";
-import { createRedisClients } from "../config/redisClient.js";
+import { createRedisClients } from "../config/redis.js";
 import axios from "axios";
 
 const { pub } = await createRedisClients();
