@@ -105,7 +105,7 @@ function buildEmailContent(payload) {
         <p style="font-size:16px; line-height:1.6;">${message}</p>
 
         <div style="margin-top:25px; text-align:center;">
-          <a href="http://localhost:5173${notificationUrl}" 
+          <a href="https://bytehive-frontend.onrender.com${notificationUrl}" 
              style="background:#4F46E5; color:white; padding:10px 20px; border-radius:6px; text-decoration:none; font-weight:bold;">
              View Notification →
           </a>

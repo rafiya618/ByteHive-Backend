@@ -156,7 +156,7 @@ async function getOpenRouterMeaning(word, prompt) {
       model: OPENROUTER_MODEL,
       messages: [{ role: "user", content: prompt }],
       headers: {
-        "HTTP-Referer": "http://localhost:5173",
+        "HTTP-Referer": "https://bytehive-frontend.onrender.com",
         "X-Title": "ByteHive Developer Platform",
       }
     });
@@ -286,7 +286,7 @@ async function simplifyWithOpenRouter(content, level, prompt, expectedFields) {
       model: OPENROUTER_MODEL,
       messages: [{ role: "user", content: prompt }],
       headers: {
-        "HTTP-Referer": "http://localhost:5173", // Required for some OpenRouter models
+        "HTTP-Referer": "https://bytehive-frontend.onrender.com", // Required for some OpenRouter models
         "X-Title": "ByteHive Developer Platform",
       }
     });
@@ -455,7 +455,7 @@ async function chatWithOpenRouter(word, userMessage, prompt) {
       model: OPENROUTER_MODEL,
       messages: [{ role: "user", content: prompt }],
       headers: {
-        "HTTP-Referer": "http://localhost:5173",
+        "HTTP-Referer": "https://bytehive-frontend.onrender.com",
         "X-Title": "ByteHive Developer Platform",
       }
     });
