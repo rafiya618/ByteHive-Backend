@@ -11,12 +11,24 @@ const __dirname = path.dirname(__filename);
 
 dotenv.config({ path: path.join(__dirname, "../.env") });
 
+// Determine OAuth callback base URL in order of precedence:
+// 1. Explicit full callback URL: GOOGLE_CALLBACK_URL
+// 2. Full service URL: AUTH_SERVICE_URL
+// 3. Constructed from HOST + AUTH_PORT (legacy fallback)
+const callbackBase =
+  process.env.GOOGLE_CALLBACK_URL ||
+  process.env.AUTH_SERVICE_URL ||
+  (process.env.HOST && process.env.AUTH_PORT ? `${process.env.HOST}:${process.env.AUTH_PORT}` : undefined);
+
+const resolvedCallbackURL = callbackBase ? `${callbackBase.replace(/\/$/, "")}/auth/google/callback` : "/auth/google/callback";
+console.log("🔐 Google OAuth callbackURL ->", resolvedCallbackURL);
+
 passport.use(
   new GoogleStrategy(
     {
       clientID: process.env.CLIENT_ID,
       clientSecret: process.env.CLIENT_SECRET,
-      callbackURL: `${process.env.HOST}:${process.env.AUTH_PORT}/auth/google/callback`,
+      callbackURL: resolvedCallbackURL,
       passReqToCallback: true
     },
     async (req, accessToken, refreshToken, profile, done) => {
