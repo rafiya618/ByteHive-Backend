@@ -11,11 +11,11 @@ import { buildNotificationUrl } from "./helpers/buildNotificationUrl.js";
 import { updateAggregation, buildAggregatedMessage } from "./helpers/aggregateNotification.js";
 import { cascadeDeletion } from "./helpers/cascadeDeletion.js";
 import { notificationCopy } from "./helpers/notificationCopy.js";
-import { getRequiredUrl } from "./env";
+import { SOCKET_GATEWAY_URL } from "./env.js";
 
 
 const { sub, pub } = await createRedisClients();
-const socket = io(getRequiredUrl("VITE_GATEWAY_URL"));
+const socket = io(SOCKET_GATEWAY_URL);
 
 // -----------------------------------------------------
 //   DEFAULT PREFERENCES  (push enabled as you requested)
