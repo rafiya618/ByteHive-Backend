@@ -41,7 +41,9 @@ router.get(
 
       // User not found or invalid
       if (!user) {
-        return res.redirect(`${process.env.FRONTEND_URL}/google-auth?error=${encodeURIComponent(info?.message || "Authentication failed.")}`);
+        const frontendBase = (process.env.FRONTEND_URL || "").replace(/\/$/, "");
+        const qs = new URLSearchParams({ error: info?.message || "Authentication failed." }).toString();
+        return res.redirect(`${frontendBase}/?${qs}`);
       }
 
       // Pass user and optional message to GoogleLogin

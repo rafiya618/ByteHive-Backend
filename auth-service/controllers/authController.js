@@ -25,6 +25,12 @@ const sendError = (res, status, field, message) => {
 // ===============================
 export const GoogleLogin = async (req, res) => {
   try {
+    const frontendBase = (process.env.FRONTEND_URL || "").replace(/\/$/, "");
+    const redirectWithParams = (params) => {
+      const qs = new URLSearchParams(params).toString();
+      return res.redirect(`${frontendBase}/?${qs}`);
+    };
+
     if (!req.user) return sendError(res, 400, "system", "User authentication failed.");
 
     // Fetch full user data to check suspension/block status
@@ -47,13 +53,13 @@ export const GoogleLogin = async (req, res) => {
             ? `Your account is temporarily suspended until ${new Date(user.suspendedUntil).toLocaleDateString()}. Reason: ${user.suspensionReason || 'Policy violation'}`
             : `Your account has been permanently suspended. Reason: ${user.suspensionReason || 'Policy violation'}`
         );
-        return res.redirect(`${process.env.FRONTEND_URL}/google-auth?error=suspended&message=${suspensionMessage}`);
+        return redirectWithParams({ error: "suspended", message: suspensionMessage });
       }
     }
 
     // Check if user is blocked
     if (user.status === "blocked") {
-      return res.redirect(`${process.env.FRONTEND_URL}/google-auth?error=blocked&message=${encodeURIComponent('Your account has been blocked.')}`);
+      return redirectWithParams({ error: "blocked", message: "Your account has been blocked." });
     }
 
     const token = generateToken(req.user);
@@ -61,7 +67,7 @@ export const GoogleLogin = async (req, res) => {
     // Pass optional info.message for frontend toast
     const msg = req.authInfo?.message ? `&message=${encodeURIComponent(req.authInfo.message)}` : "";
 
-    res.redirect(`${process.env.FRONTEND_URL}/google-auth?token=${token}${msg}`);
+    return redirectWithParams({ token, ...(req.authInfo?.message ? { message: req.authInfo.message } : {}) });
   } catch (error) {
     sendError(res, 500, "system", "Something went wrong. Please try again.");
   }
