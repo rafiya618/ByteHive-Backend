@@ -2,13 +2,14 @@
 import { io } from "socket.io-client";
 import { createRedisClients } from "./config/redisClient.js";
 import commentCacheModel from "./models/commentCacheModel.js";
-// import localCacheModel from "./models/localCacheModel.js";
+import { getRequiredUrl } from "./env";
+
 
 // 1. Await redis clients
 const { sub } = await createRedisClients();
 
 // 2. Connect socket.io client (only if gateway server is running on :4000)
-const socket = io("http://localhost:4000");
+const socket = io(getRequiredUrl("VITE_GATEWAY_URL"));
 
 
 // 3. User created cache handler
