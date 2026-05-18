@@ -44,5 +44,5 @@ mongoose.connect(mongoUri)
 // Use chatSocket for chat only
 chatSocket(io);
 
-const PORT = process.env.CHATTING_SERVICE_PORT || 5050;
+const PORT = process.env.PORT || process.env.CHATTING_SERVICE_PORT || 5050;
 server.listen(PORT, () => console.log(`Server running on Port: ${PORT}`));
